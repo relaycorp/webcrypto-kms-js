@@ -1,12 +1,19 @@
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { calculate as calculateCRC32C } from 'fast-crc32c';
 import { CryptoKey, RsaPssProvider } from 'webcrypto-core';
+import uuid4 from 'uuid4';
 
 import { bufferToArrayBuffer } from '../utils/buffer';
 import { KmsError } from '../KmsError';
 import { GcpKmsRsaPssPrivateKey } from './GcpKmsRsaPssPrivateKey';
 import { KMS_REQUEST_OPTIONS, wrapGCPCallError } from './kmsUtils';
 import { sleep } from '../utils/timing';
+import { GcpKmsConfig } from './GcpKmsConfig';
+import { NODEJS_CRYPTO } from '../utils/crypto';
+import { HashingAlgorithm } from '../algorithms';
+
+// See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
+const SUPPORTED_MODULUS_LENGTHS = [2048, 3072, 4096];
 
 // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
 const SUPPORTED_SALT_LENGTHS: readonly number[] = [
@@ -15,15 +22,56 @@ const SUPPORTED_SALT_LENGTHS: readonly number[] = [
 ];
 
 export class GcpKmsRsaPssProvider extends RsaPssProvider {
-  constructor(public kmsClient: KeyManagementServiceClient) {
+  constructor(public kmsClient: KeyManagementServiceClient, protected kmsConfig: GcpKmsConfig) {
     super();
 
     // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
     this.hashAlgorithms = ['SHA-256', 'SHA-512'];
   }
 
-  public async onGenerateKey(): Promise<CryptoKeyPair> {
-    throw new KmsError('Key generation is unsupported');
+  public async onGenerateKey(algorithm: RsaHashedKeyGenParams): Promise<CryptoKeyPair> {
+    if (!SUPPORTED_MODULUS_LENGTHS.includes(algorithm.modulusLength)) {
+      throw new KmsError(`Unsupported RSA modulus (${algorithm.modulusLength})`);
+    }
+
+    const cryptoKeyId = uuid4();
+    const kmsAlgorithm = `RSA_SIGN_PSS_${algorithm.modulusLength}_SHA256`;
+    await this.kmsClient.createCryptoKey(
+      {
+        cryptoKey: {
+          purpose: 'ASYMMETRIC_SIGN',
+          versionTemplate: { algorithm: kmsAlgorithm as any, protectionLevel: 'SOFTWARE' },
+        },
+        cryptoKeyId,
+        parent: 'PARENT',
+        skipInitialVersionCreation: false,
+      },
+      KMS_REQUEST_OPTIONS,
+    );
+
+    const kmsKeyVersionPath = this.kmsClient.cryptoKeyVersionPath(
+      await this.getGCPProjectId(),
+      this.kmsConfig.location,
+      this.kmsConfig.keyRing,
+      cryptoKeyId,
+      '1',
+    );
+
+    const privateKey = new GcpKmsRsaPssPrivateKey(
+      kmsKeyVersionPath,
+      (algorithm.hash as KeyAlgorithm).name as HashingAlgorithm,
+      this,
+    );
+    const publicKeySerialized = (await this.exportKey('spki', privateKey)) as ArrayBuffer;
+    const publicKey = await NODEJS_CRYPTO.subtle.importKey(
+      'spki',
+      publicKeySerialized,
+      algorithm,
+      true,
+      ['verify'],
+    );
+
+    return { privateKey, publicKey };
   }
 
   public async onImportKey(): Promise<CryptoKey> {
@@ -58,6 +106,11 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
 
   public async onVerify(): Promise<boolean> {
     throw new KmsError('Signature verification is unsupported');
+  }
+
+  private async getGCPProjectId(): Promise<string> {
+    // GCP client library already caches the project id.
+    return this.kmsClient.getProjectId();
   }
 
   private async kmsSign(plaintext: Buffer, key: GcpKmsRsaPssPrivateKey): Promise<ArrayBuffer> {

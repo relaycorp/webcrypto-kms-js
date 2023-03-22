@@ -4,7 +4,7 @@ import { HashingAlgorithm } from '../algorithms';
 
 const HASHING_ALGORITHM: HashingAlgorithm = 'SHA-256';
 const KMS_KEY_PATH = 'projects/foo/key/42';
-const KMS_PROVIDER = new GcpKmsRsaPssProvider(null as any);
+const KMS_PROVIDER = new GcpKmsRsaPssProvider(null as any, null as any);
 
 test('KMS key path should be honored', () => {
   const key = new GcpKmsRsaPssPrivateKey(KMS_KEY_PATH, HASHING_ALGORITHM, KMS_PROVIDER);
