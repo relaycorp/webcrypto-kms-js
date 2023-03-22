@@ -34,8 +34,15 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
       throw new KmsError(`Unsupported RSA modulus (${algorithm.modulusLength})`);
     }
 
+    const projectId = await this.getGCPProjectId();
+
     const cryptoKeyId = uuid4();
     const kmsAlgorithm = `RSA_SIGN_PSS_${algorithm.modulusLength}_SHA256`;
+    const keyRingName = this.kmsClient.keyRingPath(
+      projectId,
+      this.kmsConfig.location,
+      this.kmsConfig.keyRing,
+    );
     await this.kmsClient.createCryptoKey(
       {
         cryptoKey: {
@@ -43,14 +50,14 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
           versionTemplate: { algorithm: kmsAlgorithm as any, protectionLevel: 'SOFTWARE' },
         },
         cryptoKeyId,
-        parent: 'PARENT',
+        parent: keyRingName,
         skipInitialVersionCreation: false,
       },
       KMS_REQUEST_OPTIONS,
     );
 
     const kmsKeyVersionPath = this.kmsClient.cryptoKeyVersionPath(
-      await this.getGCPProjectId(),
+      projectId,
       this.kmsConfig.location,
       this.kmsConfig.keyRing,
       cryptoKeyId,

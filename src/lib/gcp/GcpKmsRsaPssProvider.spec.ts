@@ -146,8 +146,13 @@ describe('onGenerateKey', () => {
 
       await provider.generateKey(ALGORITHM, true, KEY_USAGES);
 
+      const keyRingName = kmsClient.keyRingPath(
+        GCP_PROJECT,
+        KMS_CONFIG.location,
+        KMS_CONFIG.keyRing,
+      );
       expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
-        expect.objectContaining({ parent: KMS_CONFIG.keyRing }),
+        expect.objectContaining({ parent: keyRingName }),
         expect.anything(),
       );
     });
@@ -269,6 +274,22 @@ describe('onGenerateKey', () => {
   });
 
   describe('Private key', () => {
+    test('Key version should be populated correctly', async () => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      const { privateKey } = await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+      const kmsKeyVersionPath = kmsClient.cryptoKeyVersionPath(
+        GCP_PROJECT,
+        KMS_CONFIG.location,
+        KMS_CONFIG.keyRing,
+        mockStubUuid4,
+        '1',
+      );
+      expect(privateKey).toHaveProperty('kmsKeyVersionPath', kmsKeyVersionPath);
+    });
+
     test('Algorithm should be populated correctly', async () => {
       const provider = new GcpKmsRsaPssProvider(makeKmsClient(), KMS_CONFIG);
 
@@ -346,7 +367,11 @@ describe('onGenerateKey', () => {
 
     jest.spyOn(kmsClient, 'getProjectId').mockImplementation(() => GCP_PROJECT);
 
-    jest.spyOn(kmsClient, 'getProjectId').mockImplementation(() => GCP_PROJECT);
+    jest.spyOn<KeyManagementServiceClient, any>(kmsClient, 'getPublicKey').mockResolvedValue([
+      {
+        pem: STUB_KMS_PUBLIC_KEY.toString('base64'),
+      },
+    ]);
 
     return kmsClient;
   }
