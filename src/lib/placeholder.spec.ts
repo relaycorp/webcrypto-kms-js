@@ -1,7 +1,7 @@
-import { doIt } from './placeholder.js';
+import { doIt } from './placeholder';
 
 describe('doIt', () => {
-  test.todo('It', () => {
+  test('It', () => {
     expect(doIt()).toBe('foo');
   });
 });
