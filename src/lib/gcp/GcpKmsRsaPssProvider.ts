@@ -21,6 +21,8 @@ const SUPPORTED_SALT_LENGTHS: readonly number[] = [
   512 / 8, // SHA-512
 ];
 
+const DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS = 86_400; // One day; the minimum allowed by GCP
+
 export class GcpKmsRsaPssProvider extends RsaPssProvider {
   constructor(public kmsClient: KeyManagementServiceClient, protected kmsConfig: GcpKmsConfig) {
     super();
@@ -37,23 +39,35 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     const projectId = await this.getGCPProjectId();
 
     const cryptoKeyId = uuid4();
-    const kmsAlgorithm = `RSA_SIGN_PSS_${algorithm.modulusLength}_SHA256`;
+    const kmsAlgorithm = getKmsAlgorithm(algorithm);
     const keyRingName = this.kmsClient.keyRingPath(
       projectId,
       this.kmsConfig.location,
       this.kmsConfig.keyRing,
     );
-    await this.kmsClient.createCryptoKey(
-      {
-        cryptoKey: {
-          purpose: 'ASYMMETRIC_SIGN',
-          versionTemplate: { algorithm: kmsAlgorithm as any, protectionLevel: 'SOFTWARE' },
+    const destroyScheduledDuration = {
+      seconds:
+        this.kmsConfig.destroyScheduledDurationSeconds ??
+        DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS,
+    };
+    await wrapGCPCallError(
+      this.kmsClient.createCryptoKey(
+        {
+          cryptoKey: {
+            destroyScheduledDuration,
+            purpose: 'ASYMMETRIC_SIGN',
+            versionTemplate: {
+              algorithm: kmsAlgorithm as any,
+              protectionLevel: this.kmsConfig.protectionLevel,
+            },
+          },
+          cryptoKeyId,
+          parent: keyRingName,
+          skipInitialVersionCreation: false,
         },
-        cryptoKeyId,
-        parent: keyRingName,
-        skipInitialVersionCreation: false,
-      },
-      KMS_REQUEST_OPTIONS,
+        KMS_REQUEST_OPTIONS,
+      ),
+      'Failed to create key',
     );
 
     const kmsKeyVersionPath = this.kmsClient.cryptoKeyVersionPath(
@@ -142,6 +156,11 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     }
     return bufferToArrayBuffer(signature);
   }
+}
+
+function getKmsAlgorithm(algorithm: RsaHashedKeyGenParams) {
+  const hash = (algorithm.hash as KeyAlgorithm).name === 'SHA-256' ? 'SHA256' : 'SHA512';
+  return `RSA_SIGN_PSS_${algorithm.modulusLength}_${hash}`;
 }
 
 export async function retrieveKMSPublicKey(

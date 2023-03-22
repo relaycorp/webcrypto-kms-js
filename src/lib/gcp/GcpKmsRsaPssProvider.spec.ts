@@ -78,7 +78,7 @@ describe('onGenerateKey', () => {
     stubPublicKeySerialized = bufferToArrayBuffer(STUB_KMS_PUBLIC_KEY);
   });
 
-  const mockRetrieveKMSPublicKey = mockSpy(
+  const mockOnExportKey = mockSpy(
     jest.spyOn(GcpKmsRsaPssProvider.prototype, 'onExportKey'),
     (format: KeyFormat) => {
       expect(format).toBe('spki');
@@ -229,7 +229,39 @@ describe('onGenerateKey', () => {
       },
     );
 
-    test.todo('Destruction schedule should be honoured');
+    test('Destruction schedule should default to 1 day', async () => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+      const oneDayInSeconds = 86_400;
+      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+        expect.toSatisfy(
+          (req: any) => req.cryptoKey.destroyScheduledDuration.seconds === oneDayInSeconds,
+        ),
+        expect.anything(),
+      );
+    });
+
+    test('Destruction schedule should be honoured if set', async () => {
+      const kmsClient = makeKmsClient();
+      const destroyScheduledDurationSeconds = 42;
+      const provider = new GcpKmsRsaPssProvider(kmsClient, {
+        ...KMS_CONFIG,
+        destroyScheduledDurationSeconds,
+      });
+
+      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+        expect.toSatisfy(
+          (req: any) =>
+            req.cryptoKey.destroyScheduledDuration.seconds === destroyScheduledDurationSeconds,
+        ),
+        expect.anything(),
+      );
+    });
 
     test('Creation call should time out after 3 seconds', async () => {
       const kmsClient = makeKmsClient();
@@ -268,7 +300,7 @@ describe('onGenerateKey', () => {
         KmsError,
       );
 
-      expect(error.message).toStartWith('Failed to create key version');
+      expect(error.message).toStartWith('Failed to create key');
       expect(error.cause).toEqual(callError);
     });
   });
@@ -315,10 +347,7 @@ describe('onGenerateKey', () => {
 
       const { privateKey, publicKey } = await provider.generateKey(ALGORITHM, true, KEY_USAGES);
 
-      expect(mockRetrieveKMSPublicKey).toHaveBeenCalledWith(
-        (privateKey as GcpKmsRsaPssPrivateKey).kmsKeyVersionPath,
-        kmsClient,
-      );
+      expect(mockOnExportKey).toHaveBeenCalledWith('spki', privateKey);
       await expect(derSerializePublicKey(publicKey)).resolves.toEqual(
         Buffer.from(stubPublicKeySerialized),
       );
