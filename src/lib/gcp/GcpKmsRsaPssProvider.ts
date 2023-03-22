@@ -100,7 +100,7 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     algorithm: RsaHashedKeyGenParams,
     projectId: string,
     cryptoKeyId: string,
-  ) {
+  ): Promise<void> {
     const kmsAlgorithm = getKmsAlgorithm(algorithm);
     const keyRingName = this.kmsClient.keyRingPath(
       projectId,
@@ -131,15 +131,11 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     );
   }
 
-  private async getPublicKeyFromPrivate(privateKey: GcpKmsRsaPssPrivateKey) {
+  private async getPublicKeyFromPrivate(privateKey: GcpKmsRsaPssPrivateKey): Promise<CryptoKey> {
     const publicKeySerialized = (await this.exportKey('spki', privateKey)) as ArrayBuffer;
-    return await NODEJS_CRYPTO.subtle.importKey(
-      'spki',
-      publicKeySerialized,
-      privateKey.algorithm,
-      true,
-      ['verify'],
-    );
+    return NODEJS_CRYPTO.subtle.importKey('spki', publicKeySerialized, privateKey.algorithm, true, [
+      'verify',
+    ]);
   }
 
   private async kmsSign(plaintext: Buffer, key: GcpKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
@@ -166,7 +162,7 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
   }
 }
 
-function getKmsAlgorithm(algorithm: RsaHashedKeyGenParams) {
+function getKmsAlgorithm(algorithm: RsaHashedKeyGenParams): string {
   const hash = (algorithm.hash as KeyAlgorithm).name === 'SHA-256' ? 'SHA256' : 'SHA512';
   return `RSA_SIGN_PSS_${algorithm.modulusLength}_${hash}`;
 }
