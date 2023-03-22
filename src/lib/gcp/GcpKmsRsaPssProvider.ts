@@ -39,36 +39,7 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     const projectId = await this.getGCPProjectId();
 
     const cryptoKeyId = uuid4();
-    const kmsAlgorithm = getKmsAlgorithm(algorithm);
-    const keyRingName = this.kmsClient.keyRingPath(
-      projectId,
-      this.kmsConfig.location,
-      this.kmsConfig.keyRing,
-    );
-    const destroyScheduledDuration = {
-      seconds:
-        this.kmsConfig.destroyScheduledDurationSeconds ??
-        DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS,
-    };
-    await wrapGCPCallError(
-      this.kmsClient.createCryptoKey(
-        {
-          cryptoKey: {
-            destroyScheduledDuration,
-            purpose: 'ASYMMETRIC_SIGN',
-            versionTemplate: {
-              algorithm: kmsAlgorithm as any,
-              protectionLevel: this.kmsConfig.protectionLevel,
-            },
-          },
-          cryptoKeyId,
-          parent: keyRingName,
-          skipInitialVersionCreation: false,
-        },
-        KMS_REQUEST_OPTIONS,
-      ),
-      'Failed to create key',
-    );
+    await this.createCryptoKey(algorithm, projectId, cryptoKeyId);
 
     const kmsKeyVersionPath = this.kmsClient.cryptoKeyVersionPath(
       projectId,
@@ -77,21 +48,12 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
       cryptoKeyId,
       '1',
     );
-
     const privateKey = new GcpKmsRsaPssPrivateKey(
       kmsKeyVersionPath,
       (algorithm.hash as KeyAlgorithm).name as HashingAlgorithm,
       this,
     );
-    const publicKeySerialized = (await this.exportKey('spki', privateKey)) as ArrayBuffer;
-    const publicKey = await NODEJS_CRYPTO.subtle.importKey(
-      'spki',
-      publicKeySerialized,
-      algorithm,
-      true,
-      ['verify'],
-    );
-
+    const publicKey = await this.getPublicKeyFromPrivate(privateKey);
     return { privateKey, publicKey };
   }
 
@@ -132,6 +94,52 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
   private async getGCPProjectId(): Promise<string> {
     // GCP client library already caches the project id.
     return this.kmsClient.getProjectId();
+  }
+
+  private async createCryptoKey(
+    algorithm: RsaHashedKeyGenParams,
+    projectId: string,
+    cryptoKeyId: string,
+  ) {
+    const kmsAlgorithm = getKmsAlgorithm(algorithm);
+    const keyRingName = this.kmsClient.keyRingPath(
+      projectId,
+      this.kmsConfig.location,
+      this.kmsConfig.keyRing,
+    );
+    const destroyScheduledDuration = {
+      seconds:
+        this.kmsConfig.destroyScheduledDurationSeconds ??
+        DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS,
+    };
+    const creationOptions = {
+      cryptoKey: {
+        destroyScheduledDuration,
+        purpose: 'ASYMMETRIC_SIGN',
+        versionTemplate: {
+          algorithm: kmsAlgorithm as any,
+          protectionLevel: this.kmsConfig.protectionLevel,
+        },
+      },
+      cryptoKeyId,
+      parent: keyRingName,
+      skipInitialVersionCreation: false,
+    } as const;
+    await wrapGCPCallError(
+      this.kmsClient.createCryptoKey(creationOptions, KMS_REQUEST_OPTIONS),
+      'Failed to create key',
+    );
+  }
+
+  private async getPublicKeyFromPrivate(privateKey: GcpKmsRsaPssPrivateKey) {
+    const publicKeySerialized = (await this.exportKey('spki', privateKey)) as ArrayBuffer;
+    return await NODEJS_CRYPTO.subtle.importKey(
+      'spki',
+      publicKeySerialized,
+      privateKey.algorithm,
+      true,
+      ['verify'],
+    );
   }
 
   private async kmsSign(plaintext: Buffer, key: GcpKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
