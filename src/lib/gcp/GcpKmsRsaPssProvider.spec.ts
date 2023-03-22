@@ -71,6 +71,7 @@ describe('onGenerateKey', () => {
     publicExponent: new Uint8Array([1, 0, 1]),
     hash: HASHING_ALGORITHM,
   };
+  // tslint:disable-next-line:readonly-array
   const KEY_USAGES: KeyUsage[] = ['sign'];
 
   let stubPublicKeySerialized: ArrayBuffer;

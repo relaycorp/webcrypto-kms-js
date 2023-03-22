@@ -13,7 +13,7 @@ import { NODEJS_CRYPTO } from '../utils/crypto';
 import { HashingAlgorithm } from '../algorithms';
 
 // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
-const SUPPORTED_MODULUS_LENGTHS = [2048, 3072, 4096];
+const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
 
 // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
 const SUPPORTED_SALT_LENGTHS: readonly number[] = [
