@@ -3,7 +3,7 @@ import { ProviderCrypto } from 'webcrypto-core';
 import { HashingAlgorithm } from './algorithms';
 import { PrivateKey, RsaPssPrivateKey } from './PrivateKey';
 
-const PROVIDER: ProviderCrypto = {} as any;
+const PROVIDER: ProviderCrypto = Symbol() as any;
 
 describe('PrivateKey', () => {
   const ALGORITHM: KeyAlgorithm = { name: 'RSA-PSS' };
