@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@google-cloud/kms": "^3.5.0",
+    "@peculiar/webcrypto": "^1.4.2",
     "fast-crc32c": "^2.0.0",
     "webcrypto-core": "^1.7.6"
   },
