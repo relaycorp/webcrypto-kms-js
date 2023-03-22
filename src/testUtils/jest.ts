@@ -1,6 +1,7 @@
 // tslint:disable-next-line:readonly-array
 export function mockSpy<T, Y extends any[]>(
   spy: jest.MockInstance<T, Y>,
+  // tslint:disable-next-line:readonly-array
   mockImplementation?: (...args: any[]) => any,
 ): jest.MockInstance<T, Y> {
   beforeEach(() => {
