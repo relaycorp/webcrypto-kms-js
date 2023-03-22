@@ -6,6 +6,7 @@ import { bufferToArrayBuffer } from '../utils/buffer';
 import { KmsError } from '../KmsError';
 import { GcpKmsRsaPssPrivateKey } from './GcpKmsRsaPssPrivateKey';
 import { KMS_REQUEST_OPTIONS, wrapGCPCallError } from './kmsUtils';
+import { sleep } from '../utils/timing';
 
 // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
 const SUPPORTED_SALT_LENGTHS: readonly number[] = [
@@ -36,8 +37,7 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
       throw new KmsError('Key is not managed by KMS');
     }
-    const keySerialized = Buffer.from('TODO');
-    return bufferToArrayBuffer(keySerialized);
+    return retrieveKMSPublicKey(key.kmsKeyVersionPath, this.kmsClient);
   }
 
   public async onSign(
@@ -82,4 +82,55 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     }
     return bufferToArrayBuffer(signature);
   }
+}
+
+export async function retrieveKMSPublicKey(
+  kmsKeyVersionName: string,
+  kmsClient: KeyManagementServiceClient,
+): Promise<ArrayBuffer> {
+  const retrieveWhenReady = async () => {
+    let key: string;
+    try {
+      key = await _retrieveKMSPublicKey(kmsKeyVersionName, kmsClient);
+    } catch (err) {
+      if (!isKeyPendingCreation(err as Error)) {
+        throw err;
+      }
+
+      // Let's give KMS a bit more time to generate the key
+      await sleep(500);
+      key = await _retrieveKMSPublicKey(kmsKeyVersionName, kmsClient);
+    }
+    return key;
+  };
+  const publicKeyPEM = await wrapGCPCallError(retrieveWhenReady(), 'Failed to retrieve public key');
+  const publicKeyDer = pemToDer(publicKeyPEM);
+  return bufferToArrayBuffer(publicKeyDer);
+}
+
+async function _retrieveKMSPublicKey(
+  kmsKeyVersionName: string,
+  kmsClient: KeyManagementServiceClient,
+): Promise<string> {
+  const [response] = await kmsClient.getPublicKey(
+    { name: kmsKeyVersionName },
+    {
+      maxRetries: 3,
+      timeout: 300,
+    },
+  );
+  return response.pem!;
+}
+
+function isKeyPendingCreation(err: Error): boolean {
+  const statusDetails = (err as any).statusDetails ?? [];
+  const pendingCreationViolations = statusDetails.filter(
+    (d: any) => 0 < d.violations.filter((v: any) => v.type === 'KEY_PENDING_GENERATION').length,
+  );
+  return !!pendingCreationViolations.length;
+}
+
+function pemToDer(pemBuffer: string): Buffer {
+  const oneliner = pemBuffer.toString().replace(/(-----[\w ]*-----|\n)/g, '');
+  return Buffer.from(oneliner, 'base64');
 }
