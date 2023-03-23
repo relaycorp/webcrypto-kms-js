@@ -57,8 +57,21 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     return { privateKey, publicKey };
   }
 
-  public async onImportKey(): Promise<CryptoKey> {
-    throw new KmsError('Key import is unsupported');
+  public async onImportKey(
+    format: KeyFormat,
+    keyData: ArrayBuffer,
+    algorithm: RsaHashedImportParams,
+  ): Promise<CryptoKey> {
+    if (format !== 'raw') {
+      throw new KmsError('Private key can only be exported to raw format');
+    }
+
+    const kmsKeyVersionPath = Buffer.from(keyData).toString();
+    return new GcpKmsRsaPssPrivateKey(
+      kmsKeyVersionPath,
+      (algorithm.hash as KeyAlgorithm).name as HashingAlgorithm,
+      this,
+    );
   }
 
   public async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer> {

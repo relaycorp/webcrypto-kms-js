@@ -1,6 +1,6 @@
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { calculate as calculateCRC32C } from 'fast-crc32c';
-import { CryptoKey } from 'webcrypto-core';
+import { CryptoKey, KeyAlgorithm } from 'webcrypto-core';
 
 import { catchPromiseRejection } from '../../testUtils/promises';
 import { bufferToArrayBuffer } from '../utils/buffer';
@@ -28,13 +28,18 @@ const KMS_CONFIG: GcpKmsConfig = {
   protectionLevel: 'SOFTWARE',
 };
 
+const HASHING_ALGORITHM_NAME = 'SHA-256';
+const HASHING_ALGORITHM: KeyAlgorithm = { name: HASHING_ALGORITHM_NAME };
+// tslint:disable-next-line:readonly-array
+const KEY_USAGES: KeyUsage[] = ['sign'];
+
 const sleepMock = mockSleep();
 
+const KMS_KEY_VERSION_PATH = '/the/path/key-name';
 let stubPrivateKey: GcpKmsRsaPssPrivateKey;
-const HASHING_ALGORITHM_NAME = 'SHA-256';
 beforeAll(async () => {
   stubPrivateKey = new GcpKmsRsaPssPrivateKey(
-    '/the/path/key-name',
+    KMS_KEY_VERSION_PATH,
     HASHING_ALGORITHM_NAME,
     new GcpKmsRsaPssProvider(null as any, KMS_CONFIG),
   );
@@ -64,15 +69,12 @@ describe('onGenerateKey', () => {
     'base64',
   );
 
-  const HASHING_ALGORITHM = { name: HASHING_ALGORITHM_NAME };
   const ALGORITHM: RsaHashedKeyGenParams = {
     name: 'RSA-PSS',
     modulusLength: 2048,
     publicExponent: new Uint8Array([1, 0, 1]),
     hash: HASHING_ALGORITHM,
   };
-  // tslint:disable-next-line:readonly-array
-  const KEY_USAGES: KeyUsage[] = ['sign'];
 
   let stubPublicKeySerialized: ArrayBuffer;
   beforeAll(async () => {
@@ -561,13 +563,48 @@ describe('onExportKey', () => {
 });
 
 describe('onImportKey', () => {
-  test('Method should not be supported', async () => {
-    const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+  const ALGORITHM: RsaHashedImportParams = { hash: HASHING_ALGORITHM, name: 'RSA-PSS' };
+  const KEY_DATA = bufferToArrayBuffer(Buffer.from(KMS_KEY_VERSION_PATH));
 
-    await expect(provider.onImportKey()).rejects.toThrowWithMessage(
-      KmsError,
-      'Key import is unsupported',
-    );
+  test.each(['jwk', 'pkcs8', 'spki'] as readonly KeyFormat[])(
+    'Format %s should be unsupported',
+    async (format) => {
+      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+
+      await expect(provider.onImportKey(format, KEY_DATA, ALGORITHM)).rejects.toThrowWithMessage(
+        KmsError,
+        'Private key can only be exported to raw format',
+      );
+    },
+  );
+
+  describe('Raw', () => {
+    test('KMS key version path should be extracted', async () => {
+      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+
+      const privateKey = await provider.importKey('raw', KEY_DATA, ALGORITHM, true, KEY_USAGES);
+
+      expect(privateKey).toBeInstanceOf(GcpKmsRsaPssPrivateKey);
+      expect((privateKey as GcpKmsRsaPssPrivateKey).kmsKeyVersionPath).toEqual(
+        KMS_KEY_VERSION_PATH,
+      );
+    });
+
+    test('Hashing algorithm should be honoured', async () => {
+      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+
+      const privateKey = await provider.importKey('raw', KEY_DATA, ALGORITHM, true, KEY_USAGES);
+
+      expect(privateKey.algorithm).toStrictEqual(ALGORITHM);
+    });
+
+    test('Provider instance should be attached to key', async () => {
+      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+
+      const privateKey = await provider.importKey('raw', KEY_DATA, ALGORITHM, true, KEY_USAGES);
+
+      expect((privateKey as GcpKmsRsaPssPrivateKey).provider).toBe(provider);
+    });
   });
 });
 
