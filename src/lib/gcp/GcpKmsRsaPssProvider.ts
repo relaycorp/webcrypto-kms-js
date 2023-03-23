@@ -62,13 +62,20 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
   }
 
   public async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer> {
-    if (format !== 'spki') {
-      throw new KmsError('Private key cannot be exported');
-    }
     if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
       throw new KmsError('Key is not managed by KMS');
     }
-    return retrieveKMSPublicKey(key.kmsKeyVersionPath, this.kmsClient);
+
+    let keySerialised: ArrayBuffer;
+    if (format === 'spki') {
+      keySerialised = await retrieveKMSPublicKey(key.kmsKeyVersionPath, this.kmsClient);
+    } else if (format === 'raw') {
+      const pathEncoded = Buffer.from(key.kmsKeyVersionPath);
+      keySerialised = bufferToArrayBuffer(pathEncoded);
+    } else {
+      throw new KmsError('Private key cannot be exported');
+    }
+    return keySerialised;
   }
 
   public async onSign(

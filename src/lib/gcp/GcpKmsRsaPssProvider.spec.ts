@@ -408,7 +408,7 @@ describe('onGenerateKey', () => {
 });
 
 describe('onExportKey', () => {
-  test.each(['jwt', 'pkcs8', 'raw'] as readonly KeyFormat[])(
+  test.each(['jwt', 'pkcs8'] as readonly KeyFormat[])(
     '%s export should be unsupported',
     async (format) => {
       const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
@@ -420,7 +420,16 @@ describe('onExportKey', () => {
     },
   );
 
-  // noinspection JSMismatchedCollectionQueryUpdate
+  describe('Raw', () => {
+    test('KMS key version path should be output', async () => {
+      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+
+      const rawKey = await provider.onExportKey('raw', stubPrivateKey);
+
+      expect(Buffer.from(rawKey).toString()).toEqual(stubPrivateKey.kmsKeyVersionPath);
+    });
+  });
+
   describe('SPKI', () => {
     test('Specified key version name should be honored', async () => {
       const kmsClient = makeKmsClient();
