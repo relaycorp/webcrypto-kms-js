@@ -57,18 +57,38 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     return { privateKey, publicKey };
   }
 
-  public async onImportKey(): Promise<CryptoKey> {
-    throw new KmsError('Key import is unsupported');
+  public async onImportKey(
+    format: KeyFormat,
+    keyData: ArrayBuffer,
+    algorithm: RsaHashedImportParams,
+  ): Promise<CryptoKey> {
+    if (format !== 'raw') {
+      throw new KmsError('Private key can only be exported to raw format');
+    }
+
+    const kmsKeyVersionPath = Buffer.from(keyData).toString();
+    return new GcpKmsRsaPssPrivateKey(
+      kmsKeyVersionPath,
+      (algorithm.hash as KeyAlgorithm).name as HashingAlgorithm,
+      this,
+    );
   }
 
   public async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer> {
-    if (format !== 'spki') {
-      throw new KmsError('Private key cannot be exported');
-    }
     if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
       throw new KmsError('Key is not managed by KMS');
     }
-    return retrieveKMSPublicKey(key.kmsKeyVersionPath, this.kmsClient);
+
+    let keySerialised: ArrayBuffer;
+    if (format === 'spki') {
+      keySerialised = await retrieveKMSPublicKey(key.kmsKeyVersionPath, this.kmsClient);
+    } else if (format === 'raw') {
+      const pathEncoded = Buffer.from(key.kmsKeyVersionPath);
+      keySerialised = bufferToArrayBuffer(pathEncoded);
+    } else {
+      throw new KmsError('Private key cannot be exported');
+    }
+    return keySerialised;
   }
 
   public async onSign(
