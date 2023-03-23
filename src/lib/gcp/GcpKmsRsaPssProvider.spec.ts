@@ -407,6 +407,150 @@ describe('onGenerateKey', () => {
   }
 });
 
+describe('onExportKey', () => {
+  test.each(['jwt', 'pkcs8', 'raw'] as readonly KeyFormat[])(
+    '%s export should be unsupported',
+    async (format) => {
+      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+
+      await expect(provider.onExportKey(format, stubPrivateKey)).rejects.toThrowWithMessage(
+        KmsError,
+        'Private key cannot be exported',
+      );
+    },
+  );
+
+  // noinspection JSMismatchedCollectionQueryUpdate
+  describe('SPKI', () => {
+    test('Specified key version name should be honored', async () => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      await provider.exportKey('spki', stubPrivateKey);
+
+      expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
+        expect.objectContaining({ name: stubPrivateKey.kmsKeyVersionPath }),
+        expect.anything(),
+      );
+    });
+
+    test('Public key should be output DER-serialized', async () => {
+      const publicKeyDer = Buffer.from('This is a DER-encoded public key :wink:');
+      const kmsClient = makeKmsClient(derPublicKeyToPem(publicKeyDer));
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      const publicKey = await provider.exportKey('spki', stubPrivateKey);
+
+      expect(publicKey).toBeInstanceOf(ArrayBuffer);
+      expect(Buffer.from(publicKey as ArrayBuffer)).toEqual(publicKeyDer);
+    });
+
+    test('Public key export should time out after 300ms', async () => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      await provider.exportKey('spki', stubPrivateKey);
+
+      expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ timeout: 300 }),
+      );
+    });
+
+    test('Public key export should be retried up to 3 times', async () => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      await provider.exportKey('spki', stubPrivateKey);
+
+      expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ maxRetries: 3 }),
+      );
+    });
+
+    test('Retrieval should be retried after 500ms if key is pending generation', async () => {
+      const publicKeyDer = Buffer.from('This is a DER-encoded public key :wink:');
+      const kmsClient = makeKmsClient();
+      const callError = new MockGCPError('Whoops', 'KEY_PENDING_GENERATION');
+      getMockInstance(kmsClient.getPublicKey)
+        .mockRejectedValueOnce(callError)
+        .mockResolvedValueOnce([{ pem: derPublicKeyToPem(publicKeyDer) }]);
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      const publicKey = await provider.exportKey('spki', stubPrivateKey);
+
+      expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(2);
+      expect(sleepMock).toHaveBeenCalledWith(500);
+      expect(getMockContext(kmsClient.getPublicKey).invocationCallOrder[0]).toBeLessThan(
+        getMockContext(sleepMock).invocationCallOrder[0],
+      );
+      expect(getMockContext(kmsClient.getPublicKey).invocationCallOrder[1]).toBeGreaterThan(
+        getMockContext(sleepMock).invocationCallOrder[0],
+      );
+      expect(Buffer.from(publicKey as ArrayBuffer)).toEqual(publicKeyDer);
+    });
+
+    test('Non-KEY_PENDING_GENERATION violations should be propagated immediately', async () => {
+      const callError = new MockGCPError('Whoops', 'NOT-KEY_PENDING_GENERATION');
+      const kmsClient = makeKmsClient(callError);
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      await catchPromiseRejection(provider.exportKey('spki', stubPrivateKey), KmsError);
+
+      expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(1);
+    });
+
+    test('Any other errors should be wrapped', async () => {
+      const callError = new Error('The service is down');
+      const kmsClient = makeKmsClient(callError);
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+      const error = await catchPromiseRejection(
+        provider.exportKey('spki', stubPrivateKey),
+        KmsError,
+      );
+
+      expect(error.message).toStartWith('Failed to retrieve public key');
+      expect(error.cause).toEqual(callError);
+      expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(1);
+    });
+
+    function makeKmsClient(
+      publicKeyPemOrError: string | Error = 'pub key',
+    ): KeyManagementServiceClient {
+      const kmsClient = new KeyManagementServiceClient();
+      jest.spyOn(kmsClient, 'getPublicKey').mockImplementation(async () => {
+        if (publicKeyPemOrError instanceof Error) {
+          throw publicKeyPemOrError;
+        }
+        return [{ pem: publicKeyPemOrError }, undefined, undefined];
+      });
+      return kmsClient;
+    }
+
+    class MockGCPError extends Error {
+      public readonly statusDetails: readonly any[];
+
+      constructor(message: string, violationType: string) {
+        super(message);
+
+        this.statusDetails = [{ violations: [{ type: violationType }] }];
+      }
+    }
+  });
+
+  test('Non-KMS key should be refused', async () => {
+    const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
+    const invalidKey = new CryptoKey();
+
+    await expect(provider.onExportKey('spki', invalidKey)).rejects.toThrowWithMessage(
+      KmsError,
+      'Key is not managed by KMS',
+    );
+  });
+});
+
 describe('onImportKey', () => {
   test('Method should not be supported', async () => {
     const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
@@ -611,150 +755,6 @@ describe('onVerify', () => {
     await expect(provider.onVerify()).rejects.toThrowWithMessage(
       KmsError,
       'Signature verification is unsupported',
-    );
-  });
-});
-
-describe('onExportKey', () => {
-  test.each(['jwt', 'pkcs8', 'raw'] as readonly KeyFormat[])(
-    '%s export should be unsupported',
-    async (format) => {
-      const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
-
-      await expect(provider.onExportKey(format, stubPrivateKey)).rejects.toThrowWithMessage(
-        KmsError,
-        'Private key cannot be exported',
-      );
-    },
-  );
-
-  // noinspection JSMismatchedCollectionQueryUpdate
-  describe('SPKI', () => {
-    test('Specified key version name should be honored', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.exportKey('spki', stubPrivateKey);
-
-      expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
-        expect.objectContaining({ name: stubPrivateKey.kmsKeyVersionPath }),
-        expect.anything(),
-      );
-    });
-
-    test('Public key should be output DER-serialized', async () => {
-      const publicKeyDer = Buffer.from('This is a DER-encoded public key :wink:');
-      const kmsClient = makeKmsClient(derPublicKeyToPem(publicKeyDer));
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      const publicKey = await provider.exportKey('spki', stubPrivateKey);
-
-      expect(publicKey).toBeInstanceOf(ArrayBuffer);
-      expect(Buffer.from(publicKey as ArrayBuffer)).toEqual(publicKeyDer);
-    });
-
-    test('Public key export should time out after 300ms', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.exportKey('spki', stubPrivateKey);
-
-      expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ timeout: 300 }),
-      );
-    });
-
-    test('Public key export should be retried up to 3 times', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.exportKey('spki', stubPrivateKey);
-
-      expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
-        expect.anything(),
-        expect.objectContaining({ maxRetries: 3 }),
-      );
-    });
-
-    test('Retrieval should be retried after 500ms if key is pending generation', async () => {
-      const publicKeyDer = Buffer.from('This is a DER-encoded public key :wink:');
-      const kmsClient = makeKmsClient();
-      const callError = new MockGCPError('Whoops', 'KEY_PENDING_GENERATION');
-      getMockInstance(kmsClient.getPublicKey)
-        .mockRejectedValueOnce(callError)
-        .mockResolvedValueOnce([{ pem: derPublicKeyToPem(publicKeyDer) }]);
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      const publicKey = await provider.exportKey('spki', stubPrivateKey);
-
-      expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(2);
-      expect(sleepMock).toHaveBeenCalledWith(500);
-      expect(getMockContext(kmsClient.getPublicKey).invocationCallOrder[0]).toBeLessThan(
-        getMockContext(sleepMock).invocationCallOrder[0],
-      );
-      expect(getMockContext(kmsClient.getPublicKey).invocationCallOrder[1]).toBeGreaterThan(
-        getMockContext(sleepMock).invocationCallOrder[0],
-      );
-      expect(Buffer.from(publicKey as ArrayBuffer)).toEqual(publicKeyDer);
-    });
-
-    test('Non-KEY_PENDING_GENERATION violations should be propagated immediately', async () => {
-      const callError = new MockGCPError('Whoops', 'NOT-KEY_PENDING_GENERATION');
-      const kmsClient = makeKmsClient(callError);
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await catchPromiseRejection(provider.exportKey('spki', stubPrivateKey), KmsError);
-
-      expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(1);
-    });
-
-    test('Any other errors should be wrapped', async () => {
-      const callError = new Error('The service is down');
-      const kmsClient = makeKmsClient(callError);
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      const error = await catchPromiseRejection(
-        provider.exportKey('spki', stubPrivateKey),
-        KmsError,
-      );
-
-      expect(error.message).toStartWith('Failed to retrieve public key');
-      expect(error.cause).toEqual(callError);
-      expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(1);
-    });
-
-    function makeKmsClient(
-      publicKeyPemOrError: string | Error = 'pub key',
-    ): KeyManagementServiceClient {
-      const kmsClient = new KeyManagementServiceClient();
-      jest.spyOn(kmsClient, 'getPublicKey').mockImplementation(async () => {
-        if (publicKeyPemOrError instanceof Error) {
-          throw publicKeyPemOrError;
-        }
-        return [{ pem: publicKeyPemOrError }, undefined, undefined];
-      });
-      return kmsClient;
-    }
-
-    class MockGCPError extends Error {
-      public readonly statusDetails: readonly any[];
-
-      constructor(message: string, violationType: string) {
-        super(message);
-
-        this.statusDetails = [{ violations: [{ type: violationType }] }];
-      }
-    }
-  });
-
-  test('Non-KMS key should be refused', async () => {
-    const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
-    const invalidKey = new CryptoKey();
-
-    await expect(provider.onExportKey('spki', invalidKey)).rejects.toThrowWithMessage(
-      KmsError,
-      'Key is not managed by KMS',
     );
   });
 });
