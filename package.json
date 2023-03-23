@@ -6,7 +6,7 @@
     "name": "Relaycorp, Inc.",
     "url": "https://relaycorp.tech/"
   },
-  "description": "Key Management Service (KMS; e.g., GCP KMS) integration for WebCrypto",
+  "description": "WebCrypto-compatible client for Key Management Services like GCP KMS",
   "main": "build/main/index.js",
   "typings": "build/main/index.d.ts",
   "module": "build/module/index.js",
