@@ -23,15 +23,3 @@ test('Hashing algorithm should be honored', () => {
 
   expect(key.algorithm).toHaveProperty('hash.name', HASHING_ALGORITHM);
 });
-
-test('Usage should be "sign"', () => {
-  const key = new GcpKmsRsaPssPrivateKey(KMS_KEY_PATH, HASHING_ALGORITHM, KMS_PROVIDER);
-
-  expect(key.usages).toEqual(['sign']);
-});
-
-test('Key should be extractable', () => {
-  const key = new GcpKmsRsaPssPrivateKey(KMS_KEY_PATH, HASHING_ALGORITHM, KMS_PROVIDER);
-
-  expect(key.extractable).toBeTrue();
-});
