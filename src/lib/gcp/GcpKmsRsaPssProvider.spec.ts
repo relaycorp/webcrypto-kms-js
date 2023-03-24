@@ -17,6 +17,7 @@ import {
   HASHING_ALGORITHM_NAME,
   KEY_USAGES,
   RSA_PSS_CREATION_ALGORITHM,
+  RSA_PSS_IMPORT_ALGORITHM,
 } from '../../testUtils/webcrypto';
 import { REAL_PUBLIC_KEYS } from '../../testUtils/stubs';
 
@@ -529,7 +530,7 @@ describe('onExportKey', () => {
 });
 
 describe('onImportKey', () => {
-  const ALGORITHM: RsaHashedImportParams = { hash: HASHING_ALGORITHM, name: 'RSA-PSS' };
+  const ALGORITHM = RSA_PSS_IMPORT_ALGORITHM;
   const KEY_DATA = bufferToArrayBuffer(Buffer.from(KMS_KEY_VERSION_PATH));
 
   test.each(['jwk', 'pkcs8', 'spki'] as readonly KeyFormat[])(

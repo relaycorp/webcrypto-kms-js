@@ -5,11 +5,14 @@ const NODEJS_CRYPTO = new Crypto();
 
 export const HASHING_ALGORITHM_NAME = 'SHA-256';
 export const HASHING_ALGORITHM: KeyAlgorithm = { name: HASHING_ALGORITHM_NAME };
-export const RSA_PSS_CREATION_ALGORITHM: RsaHashedKeyGenParams = {
+export const RSA_PSS_IMPORT_ALGORITHM: RsaHashedImportParams = {
   name: 'RSA-PSS',
+  hash: HASHING_ALGORITHM,
+};
+export const RSA_PSS_CREATION_ALGORITHM: RsaHashedKeyGenParams = {
+  ...RSA_PSS_IMPORT_ALGORITHM,
   modulusLength: 2048,
   publicExponent: new Uint8Array([1, 0, 1]),
-  hash: HASHING_ALGORITHM,
 };
 
 export async function derSerializePublicKey(publicKey: CryptoKey): Promise<Buffer> {

@@ -6,6 +6,7 @@ import {
   KeyUsageType,
   KMSClient,
 } from '@aws-sdk/client-kms';
+import { CryptoKey } from 'webcrypto-core';
 
 import { AwsKmsRsaPssProvider } from './AwsKmsRsaPssProvider';
 import {
@@ -14,12 +15,13 @@ import {
   HASHING_ALGORITHM_NAME,
   KEY_USAGES,
   RSA_PSS_CREATION_ALGORITHM,
+  RSA_PSS_IMPORT_ALGORITHM,
 } from '../../testUtils/webcrypto';
 import { KmsError } from '../KmsError';
 import { AwsKmsRsaPssPrivateKey } from './AwsKmsRsaPssPrivateKey';
 import { getMockInstance } from '../../testUtils/jest';
 import { REAL_PUBLIC_KEYS } from '../../testUtils/stubs';
-import { CryptoKey } from 'webcrypto-core';
+import { bufferToArrayBuffer } from '../utils/buffer';
 
 const AWS_KMS_KEY_ID = '24c7110a-af17-43d9-86ab-17294034c3d8';
 const AWS_KMS_KEY_ARN = `arn:aws:kms:eu-west-2:111122223333:key/${AWS_KMS_KEY_ID}`;
@@ -314,5 +316,49 @@ describe('AwsKmsRsaPssProvider', () => {
       jest.spyOn<KMSClient, any>(client, 'send').mockResolvedValue(response);
       return client;
     }
+  });
+
+  describe('onImport', () => {
+    const ALGORITHM = RSA_PSS_IMPORT_ALGORITHM;
+    const KEY_DATA = bufferToArrayBuffer(Buffer.from(AWS_KMS_KEY_ARN));
+
+    test.each(['jwk', 'pkcs8', 'spki'] as readonly KeyFormat[])(
+      'Format %s should be unsupported',
+      async (format) => {
+        const provider = new AwsKmsRsaPssProvider(null as any);
+
+        await expect(provider.onImportKey(format, KEY_DATA, ALGORITHM)).rejects.toThrowWithMessage(
+          KmsError,
+          'Private key can only be exported to raw format',
+        );
+      },
+    );
+
+    describe('Raw', () => {
+      test('Key ARN should be extracted', async () => {
+        const provider = new AwsKmsRsaPssProvider(null as any);
+
+        const privateKey = await provider.importKey('raw', KEY_DATA, ALGORITHM, true, KEY_USAGES);
+
+        expect(privateKey).toBeInstanceOf(AwsKmsRsaPssPrivateKey);
+        expect((privateKey as AwsKmsRsaPssPrivateKey).arn).toEqual(AWS_KMS_KEY_ARN);
+      });
+
+      test('Hashing algorithm should be honoured', async () => {
+        const provider = new AwsKmsRsaPssProvider(null as any);
+
+        const privateKey = await provider.importKey('raw', KEY_DATA, ALGORITHM, true, KEY_USAGES);
+
+        expect(privateKey.algorithm).toStrictEqual(ALGORITHM);
+      });
+
+      test('Provider instance should be attached to key', async () => {
+        const provider = new AwsKmsRsaPssProvider(null as any);
+
+        const privateKey = await provider.importKey('raw', KEY_DATA, ALGORITHM, true, KEY_USAGES);
+
+        expect((privateKey as AwsKmsRsaPssPrivateKey).provider).toBe(provider);
+      });
+    });
   });
 });

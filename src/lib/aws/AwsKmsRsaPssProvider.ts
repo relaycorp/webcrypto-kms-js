@@ -73,14 +73,21 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     return keySerialised;
   }
 
-  onImportKey(
-    _format: KeyFormat,
-    _keyData: ArrayBuffer | JsonWebKey,
-    _algorithm: RsaHashedImportParams,
-    _extractable: boolean,
-    _keyUsages: KeyUsage[],
+  async onImportKey(
+    format: KeyFormat,
+    keyData: ArrayBuffer,
+    algorithm: RsaHashedImportParams,
   ): Promise<CryptoKey> {
-    throw new Error('Method not implemented.');
+    if (format !== 'raw') {
+      throw new KmsError('Private key can only be exported to raw format');
+    }
+
+    const keyArn = Buffer.from(keyData).toString();
+    return new AwsKmsRsaPssPrivateKey(
+      keyArn,
+      (algorithm.hash as KeyAlgorithm).name as HashingAlgorithm,
+      this,
+    );
   }
 
   onSign(_algorithm: RsaPssParams, _key: CryptoKey, _data: ArrayBuffer): Promise<ArrayBuffer> {
