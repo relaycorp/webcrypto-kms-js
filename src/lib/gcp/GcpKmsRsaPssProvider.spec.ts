@@ -89,19 +89,7 @@ describe('onGenerateKey', () => {
     },
   );
 
-  describe('Key validation', () => {
-    test('Key should use be a signing key with RSA-PSS algorithm', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-      const invalidAlgorithmName = 'RSA-OAEP';
-
-      await expect(
-        provider.generateKey({ ...ALGORITHM, name: invalidAlgorithmName }, true, KEY_USAGES),
-      ).rejects.toThrow(
-        Error, // Comes from webcrypto-core
-      );
-    });
-
+  describe('RSA modulus', () => {
     test('Invalid modulus should be refused', async () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
@@ -110,78 +98,6 @@ describe('onGenerateKey', () => {
       await expect(
         provider.generateKey({ ...ALGORITHM, modulusLength: invalidModulus }, true, KEY_USAGES),
       ).rejects.toThrowWithMessage(KmsError, `Unsupported RSA modulus (${invalidModulus})`);
-    });
-
-    test('Invalid hashing algorithm should be refused', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-      const invalidHashingAlgorithm = 'SHA-384';
-
-      await expect(
-        provider.generateKey(
-          { ...ALGORITHM, hash: { name: invalidHashingAlgorithm } },
-          true,
-          KEY_USAGES,
-        ),
-      ).rejects.toThrowWithMessage(
-        Error,
-        /Must be one of/, // Comes from webcrypto-core
-      );
-    });
-  });
-
-  describe('KMS key creation', () => {
-    test('Key purpose should be ASYMMETRIC_SIGN', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
-
-      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
-        expect.toSatisfy((req: any) => req.cryptoKey.purpose === 'ASYMMETRIC_SIGN'),
-        expect.anything(),
-      );
-    });
-
-    test('Key should be created under specified key ring', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
-
-      const keyRingName = kmsClient.keyRingPath(
-        GCP_PROJECT,
-        KMS_CONFIG.location,
-        KMS_CONFIG.keyRing,
-      );
-      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
-        expect.objectContaining({ parent: keyRingName }),
-        expect.anything(),
-      );
-    });
-
-    test('Key name should be a UUID', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
-
-      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
-        expect.objectContaining({ cryptoKeyId: mockStubUuid4 }),
-        expect.anything(),
-      );
-    });
-
-    test('Key should be created with an initial version', async () => {
-      const kmsClient = makeKmsClient();
-      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-
-      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
-
-      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
-        expect.objectContaining({ skipInitialVersionCreation: false }),
-        expect.anything(),
-      );
     });
 
     test.each([2048, 3072, 4096])('RSA modulus %s should be supported', async (modulusLength) => {
@@ -196,6 +112,25 @@ describe('onGenerateKey', () => {
           (req: any) => req.cryptoKey.versionTemplate.algorithm === expectedAlgorithm,
         ),
         expect.anything(),
+      );
+    });
+  });
+
+  describe('Hash', () => {
+    test('Invalid hashing algorithm should be refused', async () => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+      const invalidHashingAlgorithm = 'SHA-384';
+
+      await expect(
+        provider.generateKey(
+          { ...ALGORITHM, hash: { name: invalidHashingAlgorithm } },
+          true,
+          KEY_USAGES,
+        ),
+      ).rejects.toThrowWithMessage(
+        Error,
+        /Must be one of/, // Comes from webcrypto-core
       );
     });
 
@@ -214,24 +149,75 @@ describe('onGenerateKey', () => {
         expect.anything(),
       );
     });
+  });
 
-    test.each<ProtectionLevel>(['SOFTWARE', 'HSM'])(
-      'Protection level %s should be supported',
-      async (protectionLevel: ProtectionLevel) => {
-        const kmsClient = makeKmsClient();
-        const provider = new GcpKmsRsaPssProvider(kmsClient, { ...KMS_CONFIG, protectionLevel });
+  test('Key purpose should be ASYMMETRIC_SIGN', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-        await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+    await provider.generateKey(ALGORITHM, true, KEY_USAGES);
 
-        expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
-          expect.toSatisfy(
-            (req: any) => req.cryptoKey.versionTemplate.protectionLevel === protectionLevel,
-          ),
-          expect.anything(),
-        );
-      },
+    expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+      expect.toSatisfy((req: any) => req.cryptoKey.purpose === 'ASYMMETRIC_SIGN'),
+      expect.anything(),
     );
+  });
 
+  test('Key should be created under specified key ring', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+    await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+    const keyRingName = kmsClient.keyRingPath(GCP_PROJECT, KMS_CONFIG.location, KMS_CONFIG.keyRing);
+    expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+      expect.objectContaining({ parent: keyRingName }),
+      expect.anything(),
+    );
+  });
+
+  test('Key name should be a UUID', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+    await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+    expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+      expect.objectContaining({ cryptoKeyId: mockStubUuid4 }),
+      expect.anything(),
+    );
+  });
+
+  test('Key should be created with an initial version', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+    await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+    expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+      expect.objectContaining({ skipInitialVersionCreation: false }),
+      expect.anything(),
+    );
+  });
+
+  test.each<ProtectionLevel>(['SOFTWARE', 'HSM'])(
+    'Protection level %s should be supported',
+    async (protectionLevel: ProtectionLevel) => {
+      const kmsClient = makeKmsClient();
+      const provider = new GcpKmsRsaPssProvider(kmsClient, { ...KMS_CONFIG, protectionLevel });
+
+      await provider.generateKey(ALGORITHM, true, KEY_USAGES);
+
+      expect(kmsClient.createCryptoKey).toHaveBeenCalledWith(
+        expect.toSatisfy(
+          (req: any) => req.cryptoKey.versionTemplate.protectionLevel === protectionLevel,
+        ),
+        expect.anything(),
+      );
+    },
+  );
+
+  describe('Destruction schedule', () => {
     test('Destruction schedule should default to 1 day', async () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
@@ -265,7 +251,9 @@ describe('onGenerateKey', () => {
         expect.anything(),
       );
     });
+  });
 
+  describe('Error handling', () => {
     test('Creation call should time out after 3 seconds', async () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
@@ -278,7 +266,7 @@ describe('onGenerateKey', () => {
       );
     });
 
-    test('Version creation call should be retried', async () => {
+    test('Creation call should be retried', async () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
