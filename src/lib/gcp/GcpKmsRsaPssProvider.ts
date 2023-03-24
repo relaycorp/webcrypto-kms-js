@@ -1,6 +1,6 @@
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { calculate as calculateCRC32C } from 'fast-crc32c';
-import { CryptoKey, RsaPssProvider } from 'webcrypto-core';
+import { CryptoKey } from 'webcrypto-core';
 import uuid4 from 'uuid4';
 
 import { bufferToArrayBuffer } from '../utils/buffer';
@@ -11,6 +11,7 @@ import { sleep } from '../utils/timing';
 import { GcpKmsConfig } from './GcpKmsConfig';
 import { NODEJS_CRYPTO } from '../utils/crypto';
 import { HashingAlgorithm } from '../algorithms';
+import { KmsRsaPssProvider } from '../KmsRsaPssProvider';
 
 // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
 const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
@@ -23,7 +24,7 @@ const SUPPORTED_SALT_LENGTHS: readonly number[] = [
 
 const DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS = 86_400; // One day; the minimum allowed by GCP
 
-export class GcpKmsRsaPssProvider extends RsaPssProvider {
+export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
   constructor(public kmsClient: KeyManagementServiceClient, protected kmsConfig: GcpKmsConfig) {
     super();
 
