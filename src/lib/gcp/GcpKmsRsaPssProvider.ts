@@ -6,7 +6,7 @@ import uuid4 from 'uuid4';
 import { bufferToArrayBuffer } from '../utils/buffer';
 import { KmsError } from '../KmsError';
 import { GcpKmsRsaPssPrivateKey } from './GcpKmsRsaPssPrivateKey';
-import { KMS_REQUEST_OPTIONS, wrapGCPCallError } from './kmsUtils';
+import { wrapGCPCallError } from './kmsUtils';
 import { sleep } from '../utils/timing';
 import { GcpKmsConfig } from './GcpKmsConfig';
 import { NODEJS_CRYPTO } from '../utils/crypto';
@@ -23,6 +23,14 @@ const SUPPORTED_SALT_LENGTHS: readonly number[] = [
 ];
 
 const DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS = 86_400; // One day; the minimum allowed by GCP
+
+/**
+ * The official KMS library will often try to make API requests before the authentication with the
+ * Application Default Credentials is complete, which will result in errors like "Exceeded
+ * maximum number of retries before any response was received". We're working around that by
+ * retrying a few times.
+ */
+const REQUEST_OPTIONS = { timeout: 3_000, maxRetries: 10 };
 
 export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
   constructor(public kmsClient: KeyManagementServiceClient, protected kmsConfig: GcpKmsConfig) {
@@ -147,7 +155,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
       skipInitialVersionCreation: false,
     } as const;
     await wrapGCPCallError(
-      this.kmsClient.createCryptoKey(creationOptions, KMS_REQUEST_OPTIONS),
+      this.kmsClient.createCryptoKey(creationOptions, REQUEST_OPTIONS),
       'Failed to create key',
     );
   }
@@ -164,7 +172,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     const [response] = await wrapGCPCallError(
       this.kmsClient.asymmetricSign(
         { data: plaintext, dataCrc32c: { value: plaintextChecksum }, name: key.kmsKeyVersionPath },
-        KMS_REQUEST_OPTIONS,
+        REQUEST_OPTIONS,
       ),
       'KMS signature request failed',
     );

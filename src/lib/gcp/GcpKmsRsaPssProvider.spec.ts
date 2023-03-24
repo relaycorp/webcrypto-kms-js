@@ -1,6 +1,6 @@
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { calculate as calculateCRC32C } from 'fast-crc32c';
-import { CryptoKey, KeyAlgorithm } from 'webcrypto-core';
+import { CryptoKey } from 'webcrypto-core';
 
 import { catchPromiseRejection } from '../../testUtils/promises';
 import { bufferToArrayBuffer } from '../utils/buffer';
@@ -11,7 +11,13 @@ import { mockSleep } from '../../testUtils/timing';
 import { derPublicKeyToPem } from '../../testUtils/asn1';
 import { getMockContext, getMockInstance, mockSpy } from '../../testUtils/jest';
 import { GcpKmsConfig, ProtectionLevel } from './GcpKmsConfig';
-import { derSerializePublicKey } from '../../testUtils/crypto';
+import {
+  derSerializePublicKey,
+  HASHING_ALGORITHM,
+  HASHING_ALGORITHM_NAME,
+  KEY_USAGES,
+  RSA_PSS_CREATION_ALGORITHM,
+} from '../../testUtils/webcrypto';
 
 const mockStubUuid4 = '56e95d8a-6be2-4020-bb36-5dd0da36c181';
 jest.mock('uuid4', () => {
@@ -27,11 +33,6 @@ const KMS_CONFIG: GcpKmsConfig = {
   location: 'westeros-east1',
   protectionLevel: 'SOFTWARE',
 };
-
-const HASHING_ALGORITHM_NAME = 'SHA-256';
-const HASHING_ALGORITHM: KeyAlgorithm = { name: HASHING_ALGORITHM_NAME };
-// tslint:disable-next-line:readonly-array
-const KEY_USAGES: KeyUsage[] = ['sign'];
 
 const sleepMock = mockSleep();
 
@@ -49,7 +50,7 @@ describe('hashingAlgorithms', () => {
   test('Only SHA-256 and SHA-512 should be supported', async () => {
     const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
 
-    expect(provider.hashAlgorithms).toEqual([HASHING_ALGORITHM_NAME, 'SHA-512']);
+    expect(provider.hashAlgorithms).toEqual(['SHA-256', 'SHA-512']);
   });
 });
 
@@ -69,12 +70,7 @@ describe('onGenerateKey', () => {
     'base64',
   );
 
-  const ALGORITHM: RsaHashedKeyGenParams = {
-    name: 'RSA-PSS',
-    modulusLength: 2048,
-    publicExponent: new Uint8Array([1, 0, 1]),
-    hash: HASHING_ALGORITHM,
-  };
+  const ALGORITHM = RSA_PSS_CREATION_ALGORITHM;
 
   let stubPublicKeySerialized: ArrayBuffer;
   beforeAll(async () => {
