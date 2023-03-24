@@ -1,10 +1,17 @@
-import { CreateKeyCommand, KeyUsageType, KMSClient } from '@aws-sdk/client-kms';
+import {
+  CreateKeyCommand,
+  GetPublicKeyCommand,
+  KeyUsageType,
+  KMSClient,
+} from '@aws-sdk/client-kms';
 import { CryptoKey } from 'webcrypto-core';
 
 import { KmsRsaPssProvider } from '../KmsRsaPssProvider';
 import { AwsKmsRsaPssPrivateKey } from './AwsKmsRsaPssPrivateKey';
 import { KmsError } from '../KmsError';
 import { HashingAlgorithm } from '../algorithms';
+import { bufferToArrayBuffer } from '../utils/buffer';
+import { derDeserialisePublicKey } from '../utils/crypto';
 
 // See: https://docs.aws.amazon.com/kms/latest/developerguide/asymmetric-key-specs.html
 const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
@@ -42,7 +49,28 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
       this,
     );
 
-    return { privateKey, publicKey: {} as any };
+    const publicKeySerialised = await this.retrievePublicKey(privateKey);
+    const publicKey = await derDeserialisePublicKey(publicKeySerialised, algorithm);
+
+    return { privateKey, publicKey };
+  }
+
+  async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer | JsonWebKey> {
+    if (!(key instanceof AwsKmsRsaPssPrivateKey)) {
+      throw new KmsError('Key is not managed by AWS KMS');
+    }
+
+    let keySerialised: ArrayBuffer;
+    if (format === 'raw') {
+      const arnEncoded = Buffer.from(key.arn);
+      keySerialised = bufferToArrayBuffer(arnEncoded);
+    } else if (format === 'spki') {
+      keySerialised = await this.retrievePublicKey(key);
+    } else {
+      throw new KmsError('Private key cannot be exported');
+    }
+
+    return keySerialised;
   }
 
   onImportKey(
@@ -52,10 +80,6 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     _extractable: boolean,
     _keyUsages: KeyUsage[],
   ): Promise<CryptoKey> {
-    throw new Error('Method not implemented.');
-  }
-
-  onExportKey(_format: KeyFormat, _key: CryptoKey): Promise<ArrayBuffer | JsonWebKey> {
     throw new Error('Method not implemented.');
   }
 
@@ -70,5 +94,11 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     _data: ArrayBuffer,
   ): Promise<boolean> {
     throw new Error('Method not implemented.');
+  }
+
+  private async retrievePublicKey(key: AwsKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
+    const command = new GetPublicKeyCommand({ KeyId: key.arn });
+    const response = await this.client.send(command, REQUEST_OPTIONS);
+    return bufferToArrayBuffer(response.PublicKey!);
   }
 }

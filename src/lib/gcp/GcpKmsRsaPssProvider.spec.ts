@@ -18,6 +18,7 @@ import {
   KEY_USAGES,
   RSA_PSS_CREATION_ALGORITHM,
 } from '../../testUtils/webcrypto';
+import { REAL_PUBLIC_KEYS } from '../../testUtils/stubs';
 
 const mockStubUuid4 = '56e95d8a-6be2-4020-bb36-5dd0da36c181';
 jest.mock('uuid4', () => {
@@ -37,14 +38,11 @@ const KMS_CONFIG: GcpKmsConfig = {
 const sleepMock = mockSleep();
 
 const KMS_KEY_VERSION_PATH = '/the/path/key-name';
-let stubPrivateKey: GcpKmsRsaPssPrivateKey;
-beforeAll(async () => {
-  stubPrivateKey = new GcpKmsRsaPssPrivateKey(
-    KMS_KEY_VERSION_PATH,
-    HASHING_ALGORITHM_NAME,
-    new GcpKmsRsaPssProvider(null as any, KMS_CONFIG),
-  );
-});
+const PRIVATE_KEY = new GcpKmsRsaPssPrivateKey(
+  KMS_KEY_VERSION_PATH,
+  HASHING_ALGORITHM_NAME,
+  null as any,
+);
 
 describe('hashingAlgorithms', () => {
   test('Only SHA-256 and SHA-512 should be supported', async () => {
@@ -55,26 +53,13 @@ describe('hashingAlgorithms', () => {
 });
 
 describe('onGenerateKey', () => {
-  /**
-   * Actual public key exported from GCP KMS.
-   *
-   * Copied here to avoid interoperability issues -- namely around the serialisation of
-   * `AlgorithmParams` (`NULL` vs absent).
-   */
-  const STUB_KMS_PUBLIC_KEY = Buffer.from(
-    'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAnL8hQlf3GLajYh5NA6k7bpHPYUxjiZJgOEiDs8y1iPa6p' +
-      '/40p6OeFAakIgqNBZS4CfWnZQ8fPJxCN3ctRMOXQqyajkXHqcUO07shjlvJA9niPQfqpLF2izdSimqMdZkPDfOs4Q' +
-      '254+ZLld/JpGn4CocYMaACXWrT+sY4CWw0EJh2kWKcEWF9Z5TL7wA+mJyHZN/cTndIM1kORb8ADzNfyBPMhGRp31N' +
-      '4dLff0H28MQCr/0GPbAA+5dMReCPTMLollAI4JmaNtYEaw32sSsH35POtfVz91ui5AaxVONapfw4NfLrxdBvySBhZ' +
-      'Zq76INzyG6uwx7TDqJwy0e+SLmF4mQIDAQAB',
-    'base64',
-  );
+  const REAL_PUBLIC_KEY = REAL_PUBLIC_KEYS.gcp;
 
   const ALGORITHM = RSA_PSS_CREATION_ALGORITHM;
 
   let stubPublicKeySerialized: ArrayBuffer;
   beforeAll(async () => {
-    stubPublicKeySerialized = bufferToArrayBuffer(STUB_KMS_PUBLIC_KEY);
+    stubPublicKeySerialized = bufferToArrayBuffer(REAL_PUBLIC_KEY);
   });
 
   const mockOnExportKey = mockSpy(
@@ -385,7 +370,7 @@ describe('onGenerateKey', () => {
 
     jest.spyOn<KeyManagementServiceClient, any>(kmsClient, 'getPublicKey').mockResolvedValue([
       {
-        pem: STUB_KMS_PUBLIC_KEY.toString('base64'),
+        pem: REAL_PUBLIC_KEY.toString('base64'),
       },
     ]);
 
@@ -399,7 +384,7 @@ describe('onExportKey', () => {
     async (format) => {
       const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
 
-      await expect(provider.onExportKey(format, stubPrivateKey)).rejects.toThrowWithMessage(
+      await expect(provider.onExportKey(format, PRIVATE_KEY)).rejects.toThrowWithMessage(
         KmsError,
         'Private key cannot be exported',
       );
@@ -410,31 +395,31 @@ describe('onExportKey', () => {
     test('KMS key version path should be output', async () => {
       const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
 
-      const rawKey = await provider.onExportKey('raw', stubPrivateKey);
+      const rawKey = (await provider.exportKey('raw', PRIVATE_KEY)) as ArrayBuffer;
 
-      expect(Buffer.from(rawKey).toString()).toEqual(stubPrivateKey.kmsKeyVersionPath);
+      expect(Buffer.from(rawKey).toString()).toEqual(PRIVATE_KEY.kmsKeyVersionPath);
     });
   });
 
   describe('SPKI', () => {
-    test('Specified key version name should be honored', async () => {
+    test('Specified key version name should be retrieved', async () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      await provider.exportKey('spki', stubPrivateKey);
+      await provider.exportKey('spki', PRIVATE_KEY);
 
       expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
-        expect.objectContaining({ name: stubPrivateKey.kmsKeyVersionPath }),
+        expect.objectContaining({ name: PRIVATE_KEY.kmsKeyVersionPath }),
         expect.anything(),
       );
     });
 
-    test('Public key should be output DER-serialized', async () => {
+    test('Public key should be output DER-serialised', async () => {
       const publicKeyDer = Buffer.from('This is a DER-encoded public key :wink:');
       const kmsClient = makeKmsClient(derPublicKeyToPem(publicKeyDer));
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      const publicKey = await provider.exportKey('spki', stubPrivateKey);
+      const publicKey = await provider.exportKey('spki', PRIVATE_KEY);
 
       expect(publicKey).toBeInstanceOf(ArrayBuffer);
       expect(Buffer.from(publicKey as ArrayBuffer)).toEqual(publicKeyDer);
@@ -444,7 +429,7 @@ describe('onExportKey', () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      await provider.exportKey('spki', stubPrivateKey);
+      await provider.exportKey('spki', PRIVATE_KEY);
 
       expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
         expect.anything(),
@@ -456,7 +441,7 @@ describe('onExportKey', () => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      await provider.exportKey('spki', stubPrivateKey);
+      await provider.exportKey('spki', PRIVATE_KEY);
 
       expect(kmsClient.getPublicKey).toHaveBeenCalledWith(
         expect.anything(),
@@ -473,7 +458,7 @@ describe('onExportKey', () => {
         .mockResolvedValueOnce([{ pem: derPublicKeyToPem(publicKeyDer) }]);
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      const publicKey = await provider.exportKey('spki', stubPrivateKey);
+      const publicKey = await provider.exportKey('spki', PRIVATE_KEY);
 
       expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(2);
       expect(sleepMock).toHaveBeenCalledWith(500);
@@ -491,7 +476,7 @@ describe('onExportKey', () => {
       const kmsClient = makeKmsClient(callError);
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      await catchPromiseRejection(provider.exportKey('spki', stubPrivateKey), KmsError);
+      await catchPromiseRejection(provider.exportKey('spki', PRIVATE_KEY), KmsError);
 
       expect(kmsClient.getPublicKey).toHaveBeenCalledTimes(1);
     });
@@ -501,10 +486,7 @@ describe('onExportKey', () => {
       const kmsClient = makeKmsClient(callError);
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-      const error = await catchPromiseRejection(
-        provider.exportKey('spki', stubPrivateKey),
-        KmsError,
-      );
+      const error = await catchPromiseRejection(provider.exportKey('spki', PRIVATE_KEY), KmsError);
 
       expect(error.message).toStartWith('Failed to retrieve public key');
       expect(error.cause).toEqual(callError);
@@ -541,7 +523,7 @@ describe('onExportKey', () => {
 
     await expect(provider.onExportKey('spki', invalidKey)).rejects.toThrowWithMessage(
       KmsError,
-      'Key is not managed by KMS',
+      'Key is not managed by GCP KMS',
     );
   });
 });
@@ -614,7 +596,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient({ signature: SIGNATURE });
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    const signature = await provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT);
+    const signature = await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
 
     expect(Buffer.from(signature)).toEqual(SIGNATURE);
   });
@@ -623,10 +605,10 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT);
+    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
-      expect.objectContaining({ name: stubPrivateKey.kmsKeyVersionPath }),
+      expect.objectContaining({ name: PRIVATE_KEY.kmsKeyVersionPath }),
       expect.anything(),
     );
   });
@@ -635,7 +617,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT);
+    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.toSatisfy((req) => Buffer.from(req.data).equals(Buffer.from(PLAINTEXT))),
@@ -647,7 +629,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT);
+    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.objectContaining({ dataCrc32c: { value: calculateCRC32C(Buffer.from(PLAINTEXT)) } }),
@@ -662,7 +644,7 @@ describe('onSign', () => {
     );
 
     await expect(
-      provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT),
+      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
     ).rejects.toThrowWithMessage(KmsError, 'KMS failed to verify plaintext CRC32C checksum');
   });
 
@@ -673,7 +655,7 @@ describe('onSign', () => {
     );
 
     await expect(
-      provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT),
+      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
     ).rejects.toThrowWithMessage(
       KmsError,
       'Signature CRC32C checksum does not match one received from KMS',
@@ -681,11 +663,11 @@ describe('onSign', () => {
   });
 
   test('KMS should sign with the specified key', async () => {
-    const kmsKeyVersionName = `not-${stubPrivateKey.kmsKeyVersionPath}`;
+    const kmsKeyVersionName = `not-${PRIVATE_KEY.kmsKeyVersionPath}`;
     const provider = new GcpKmsRsaPssProvider(makeKmsClient({ kmsKeyVersionName }), KMS_CONFIG);
 
     await expect(
-      provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT),
+      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
     ).rejects.toThrowWithMessage(KmsError, `KMS used the wrong key version (${kmsKeyVersionName})`);
   });
 
@@ -693,7 +675,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT);
+    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.anything(),
@@ -705,7 +687,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT);
+    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.anything(),
@@ -718,7 +700,7 @@ describe('onSign', () => {
     const provider = new GcpKmsRsaPssProvider(makeKmsClient(callError), KMS_CONFIG);
 
     const error = await catchPromiseRejection(
-      provider.sign(ALGORITHM_PARAMS, stubPrivateKey, PLAINTEXT),
+      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
       KmsError,
     );
 
@@ -732,7 +714,7 @@ describe('onSign', () => {
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
       const algorithm = { ...ALGORITHM_PARAMS, saltLength };
 
-      await provider.sign(algorithm, stubPrivateKey, PLAINTEXT);
+      await provider.sign(algorithm, PRIVATE_KEY, PLAINTEXT);
     });
 
     test.each([20, 48])('Salt length of %s should be refused', async (saltLength) => {
@@ -741,7 +723,7 @@ describe('onSign', () => {
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
       const algorithm = { ...ALGORITHM_PARAMS, saltLength };
 
-      await expect(provider.sign(algorithm, stubPrivateKey, PLAINTEXT)).rejects.toThrowWithMessage(
+      await expect(provider.sign(algorithm, PRIVATE_KEY, PLAINTEXT)).rejects.toThrowWithMessage(
         KmsError,
         `Unsupported salt length of ${saltLength} octets`,
       );
@@ -767,7 +749,7 @@ describe('onSign', () => {
       const signature = responseOrError.signature ?? SIGNATURE;
       const signatureCrc32c = responseOrError.signatureCRC32C ?? calculateCRC32C(signature);
       const response = {
-        name: responseOrError.kmsKeyVersionName ?? stubPrivateKey.kmsKeyVersionPath,
+        name: responseOrError.kmsKeyVersionName ?? PRIVATE_KEY.kmsKeyVersionPath,
         signature,
         signatureCrc32c: { value: signatureCrc32c.toString() },
         verifiedDataCrc32c: responseOrError.verifiedSignatureCRC32C ?? true,

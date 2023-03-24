@@ -9,7 +9,7 @@ import { GcpKmsRsaPssPrivateKey } from './GcpKmsRsaPssPrivateKey';
 import { wrapGCPCallError } from './kmsUtils';
 import { sleep } from '../utils/timing';
 import { GcpKmsConfig } from './GcpKmsConfig';
-import { NODEJS_CRYPTO } from '../utils/crypto';
+import { derDeserialisePublicKey } from '../utils/crypto';
 import { HashingAlgorithm } from '../algorithms';
 import { KmsRsaPssProvider } from '../KmsRsaPssProvider';
 
@@ -85,7 +85,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
 
   public async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer> {
     if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
-      throw new KmsError('Key is not managed by KMS');
+      throw new KmsError('Key is not managed by GCP KMS');
     }
 
     let keySerialised: ArrayBuffer;
@@ -162,9 +162,10 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
 
   private async getPublicKeyFromPrivate(privateKey: GcpKmsRsaPssPrivateKey): Promise<CryptoKey> {
     const publicKeySerialized = (await this.exportKey('spki', privateKey)) as ArrayBuffer;
-    return NODEJS_CRYPTO.subtle.importKey('spki', publicKeySerialized, privateKey.algorithm, true, [
-      'verify',
-    ]);
+    return derDeserialisePublicKey(
+      publicKeySerialized,
+      privateKey.algorithm as RsaHashedImportParams,
+    );
   }
 
   private async kmsSign(plaintext: Buffer, key: GcpKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
