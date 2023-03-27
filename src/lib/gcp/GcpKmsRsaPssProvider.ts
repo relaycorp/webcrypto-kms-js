@@ -1,16 +1,17 @@
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { calculate as calculateCRC32C } from 'fast-crc32c';
-import { CryptoKey, RsaPssProvider } from 'webcrypto-core';
+import { CryptoKey } from 'webcrypto-core';
 import uuid4 from 'uuid4';
 
 import { bufferToArrayBuffer } from '../utils/buffer';
 import { KmsError } from '../KmsError';
 import { GcpKmsRsaPssPrivateKey } from './GcpKmsRsaPssPrivateKey';
-import { KMS_REQUEST_OPTIONS, wrapGCPCallError } from './kmsUtils';
+import { wrapGCPCallError } from './kmsUtils';
 import { sleep } from '../utils/timing';
 import { GcpKmsConfig } from './GcpKmsConfig';
-import { NODEJS_CRYPTO } from '../utils/crypto';
+import { derDeserialisePublicKey } from '../utils/crypto';
 import { HashingAlgorithm } from '../algorithms';
+import { KmsRsaPssProvider } from '../KmsRsaPssProvider';
 
 // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
 const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
@@ -23,7 +24,15 @@ const SUPPORTED_SALT_LENGTHS: readonly number[] = [
 
 const DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS = 86_400; // One day; the minimum allowed by GCP
 
-export class GcpKmsRsaPssProvider extends RsaPssProvider {
+/**
+ * The official KMS library will often try to make API requests before the authentication with the
+ * Application Default Credentials is complete, which will result in errors like "Exceeded
+ * maximum number of retries before any response was received". We're working around that by
+ * retrying a few times.
+ */
+const REQUEST_OPTIONS = { timeout: 3_000, maxRetries: 10 };
+
+export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
   constructor(public kmsClient: KeyManagementServiceClient, protected kmsConfig: GcpKmsConfig) {
     super();
 
@@ -76,7 +85,7 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
 
   public async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer> {
     if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
-      throw new KmsError('Key is not managed by KMS');
+      throw new KmsError('Key is not managed by GCP KMS');
     }
 
     let keySerialised: ArrayBuffer;
@@ -146,16 +155,17 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
       skipInitialVersionCreation: false,
     } as const;
     await wrapGCPCallError(
-      this.kmsClient.createCryptoKey(creationOptions, KMS_REQUEST_OPTIONS),
+      this.kmsClient.createCryptoKey(creationOptions, REQUEST_OPTIONS),
       'Failed to create key',
     );
   }
 
   private async getPublicKeyFromPrivate(privateKey: GcpKmsRsaPssPrivateKey): Promise<CryptoKey> {
     const publicKeySerialized = (await this.exportKey('spki', privateKey)) as ArrayBuffer;
-    return NODEJS_CRYPTO.subtle.importKey('spki', publicKeySerialized, privateKey.algorithm, true, [
-      'verify',
-    ]);
+    return derDeserialisePublicKey(
+      publicKeySerialized,
+      privateKey.algorithm as RsaHashedImportParams,
+    );
   }
 
   private async kmsSign(plaintext: Buffer, key: GcpKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
@@ -163,7 +173,7 @@ export class GcpKmsRsaPssProvider extends RsaPssProvider {
     const [response] = await wrapGCPCallError(
       this.kmsClient.asymmetricSign(
         { data: plaintext, dataCrc32c: { value: plaintextChecksum }, name: key.kmsKeyVersionPath },
-        KMS_REQUEST_OPTIONS,
+        REQUEST_OPTIONS,
       ),
       'KMS signature request failed',
     );
