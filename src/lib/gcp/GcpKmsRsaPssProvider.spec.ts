@@ -18,8 +18,9 @@ import {
   KEY_USAGES,
   RSA_PSS_CREATION_ALGORITHM,
   RSA_PSS_IMPORT_ALGORITHM,
+  RSA_PSS_SIGN_ALGORITHM,
 } from '../../testUtils/webcrypto';
-import { REAL_PUBLIC_KEYS } from '../../testUtils/stubs';
+import { PLAINTEXT, REAL_PUBLIC_KEYS, SIGNATURE } from '../../testUtils/stubs';
 
 const mockStubUuid4 = '56e95d8a-6be2-4020-bb36-5dd0da36c181';
 jest.mock('uuid4', () => {
@@ -576,16 +577,14 @@ describe('onImportKey', () => {
 });
 
 describe('onSign', () => {
-  const PLAINTEXT = bufferToArrayBuffer(Buffer.from('the plaintext'));
-  const SIGNATURE = Buffer.from('the signature');
-  const ALGORITHM_PARAMS: RsaPssParams = { name: 'RSA-PSS', saltLength: 32 };
+  const ALGORITHM = RSA_PSS_SIGN_ALGORITHM;
 
   test('Non-KMS key should be refused', async () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
     const invalidKey = CryptoKey.create({ name: 'RSA-PSS' }, 'private', true, ['sign']);
 
-    await expect(provider.sign(ALGORITHM_PARAMS, invalidKey, PLAINTEXT)).rejects.toThrowWithMessage(
+    await expect(provider.sign(ALGORITHM, invalidKey, PLAINTEXT)).rejects.toThrowWithMessage(
       KmsError,
       `Cannot sign with key of unsupported type (${invalidKey.constructor.name})`,
     );
@@ -597,7 +596,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient({ signature: SIGNATURE });
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    const signature = await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
+    const signature = await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
 
     expect(Buffer.from(signature)).toEqual(SIGNATURE);
   });
@@ -606,7 +605,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
+    await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.objectContaining({ name: PRIVATE_KEY.kmsKeyVersionPath }),
@@ -618,7 +617,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
+    await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.toSatisfy((req) => Buffer.from(req.data).equals(Buffer.from(PLAINTEXT))),
@@ -630,7 +629,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
+    await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.objectContaining({ dataCrc32c: { value: calculateCRC32C(Buffer.from(PLAINTEXT)) } }),
@@ -644,9 +643,10 @@ describe('onSign', () => {
       KMS_CONFIG,
     );
 
-    await expect(
-      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
-    ).rejects.toThrowWithMessage(KmsError, 'KMS failed to verify plaintext CRC32C checksum');
+    await expect(provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT)).rejects.toThrowWithMessage(
+      KmsError,
+      'KMS failed to verify plaintext CRC32C checksum',
+    );
   });
 
   test('Signature CRC32C checksum from the KMS should be verified', async () => {
@@ -655,9 +655,7 @@ describe('onSign', () => {
       KMS_CONFIG,
     );
 
-    await expect(
-      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
-    ).rejects.toThrowWithMessage(
+    await expect(provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT)).rejects.toThrowWithMessage(
       KmsError,
       'Signature CRC32C checksum does not match one received from KMS',
     );
@@ -667,16 +665,17 @@ describe('onSign', () => {
     const kmsKeyVersionName = `not-${PRIVATE_KEY.kmsKeyVersionPath}`;
     const provider = new GcpKmsRsaPssProvider(makeKmsClient({ kmsKeyVersionName }), KMS_CONFIG);
 
-    await expect(
-      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
-    ).rejects.toThrowWithMessage(KmsError, `KMS used the wrong key version (${kmsKeyVersionName})`);
+    await expect(provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT)).rejects.toThrowWithMessage(
+      KmsError,
+      `KMS used the wrong key version (${kmsKeyVersionName})`,
+    );
   });
 
   test('Request should time out after 3 seconds', async () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
+    await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.anything(),
@@ -688,7 +687,7 @@ describe('onSign', () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
-    await provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT);
+    await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
 
     expect(kmsClient.asymmetricSign).toHaveBeenCalledWith(
       expect.anything(),
@@ -701,7 +700,7 @@ describe('onSign', () => {
     const provider = new GcpKmsRsaPssProvider(makeKmsClient(callError), KMS_CONFIG);
 
     const error = await catchPromiseRejection(
-      provider.sign(ALGORITHM_PARAMS, PRIVATE_KEY, PLAINTEXT),
+      provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT),
       KmsError,
     );
 
@@ -713,7 +712,7 @@ describe('onSign', () => {
     test.each([32, 64])('Salt length of %s should be accepted', async (saltLength) => {
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-      const algorithm = { ...ALGORITHM_PARAMS, saltLength };
+      const algorithm = { ...ALGORITHM, saltLength };
 
       await provider.sign(algorithm, PRIVATE_KEY, PLAINTEXT);
     });
@@ -722,7 +721,7 @@ describe('onSign', () => {
       // 20 and 48 are used by SHA-1 and SHA-384, respectively, which are unsupported
       const kmsClient = makeKmsClient();
       const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
-      const algorithm = { ...ALGORITHM_PARAMS, saltLength };
+      const algorithm = { ...ALGORITHM, saltLength };
 
       await expect(provider.sign(algorithm, PRIVATE_KEY, PLAINTEXT)).rejects.toThrowWithMessage(
         KmsError,

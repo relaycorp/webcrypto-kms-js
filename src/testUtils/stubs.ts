@@ -1,3 +1,5 @@
+import { bufferToArrayBuffer } from '../lib/utils/buffer';
+
 /**
  * Real public keys exported from their respective KMSs.
  *
@@ -22,3 +24,7 @@ export const REAL_PUBLIC_KEYS = {
     'base64',
   ),
 } as const;
+
+export const PLAINTEXT = bufferToArrayBuffer(Buffer.from('the plaintext'));
+
+export const SIGNATURE = Buffer.from('the signature');

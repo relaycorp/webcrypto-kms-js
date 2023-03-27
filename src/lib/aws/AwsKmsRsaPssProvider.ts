@@ -3,6 +3,7 @@ import {
   GetPublicKeyCommand,
   KeyUsageType,
   KMSClient,
+  SignCommand,
 } from '@aws-sdk/client-kms';
 import { CryptoKey } from 'webcrypto-core';
 
@@ -11,7 +12,7 @@ import { AwsKmsRsaPssPrivateKey } from './AwsKmsRsaPssPrivateKey';
 import { KmsError } from '../KmsError';
 import { HashingAlgorithm } from '../algorithms';
 import { bufferToArrayBuffer } from '../utils/buffer';
-import { derDeserialisePublicKey } from '../utils/crypto';
+import { derDeserialisePublicKey, hash } from '../utils/crypto';
 
 // See: https://docs.aws.amazon.com/kms/latest/developerguide/asymmetric-key-specs.html
 const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
@@ -90,8 +91,23 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     );
   }
 
-  onSign(_algorithm: RsaPssParams, _key: CryptoKey, _data: ArrayBuffer): Promise<ArrayBuffer> {
-    throw new Error('Method not implemented.');
+  async onSign(_algorithm: RsaPssParams, key: CryptoKey, data: ArrayBuffer): Promise<ArrayBuffer> {
+    if (!(key instanceof AwsKmsRsaPssPrivateKey)) {
+      throw new KmsError('Key is not managed by AWS KMS');
+    }
+
+    const hashingAlgorithm = (key.algorithm as RsaHashedKeyAlgorithm).hash.name;
+    const digest = await hash(data, hashingAlgorithm as HashingAlgorithm);
+    const awsHashAlgo = `RSASSA_PSS_${hashingAlgorithm.replace('-', '_')}`;
+    const command = new SignCommand({
+      KeyId: key.arn,
+      Message: Buffer.from(digest),
+      MessageType: 'DIGEST',
+      SigningAlgorithm: awsHashAlgo,
+    });
+
+    const output = await this.client.send(command, REQUEST_OPTIONS);
+    return bufferToArrayBuffer(output.Signature!);
   }
 
   onVerify(

@@ -5,6 +5,8 @@ import {
   GetPublicKeyCommandOutput,
   KeyUsageType,
   KMSClient,
+  SignCommand,
+  SignCommandOutput,
 } from '@aws-sdk/client-kms';
 import { CryptoKey } from 'webcrypto-core';
 
@@ -14,14 +16,17 @@ import {
   HASHING_ALGORITHM,
   HASHING_ALGORITHM_NAME,
   KEY_USAGES,
+  NODEJS_CRYPTO,
   RSA_PSS_CREATION_ALGORITHM,
   RSA_PSS_IMPORT_ALGORITHM,
+  RSA_PSS_SIGN_ALGORITHM,
 } from '../../testUtils/webcrypto';
 import { KmsError } from '../KmsError';
 import { AwsKmsRsaPssPrivateKey } from './AwsKmsRsaPssPrivateKey';
 import { getMockInstance } from '../../testUtils/jest';
-import { REAL_PUBLIC_KEYS } from '../../testUtils/stubs';
+import { PLAINTEXT, REAL_PUBLIC_KEYS, SIGNATURE } from '../../testUtils/stubs';
 import { bufferToArrayBuffer } from '../utils/buffer';
+import { HashingAlgorithm } from '../algorithms';
 
 const AWS_KMS_KEY_ID = '24c7110a-af17-43d9-86ab-17294034c3d8';
 const AWS_KMS_KEY_ARN = `arn:aws:kms:eu-west-2:111122223333:key/${AWS_KMS_KEY_ID}`;
@@ -360,5 +365,88 @@ describe('AwsKmsRsaPssProvider', () => {
         expect((privateKey as AwsKmsRsaPssPrivateKey).provider).toBe(provider);
       });
     });
+  });
+
+  describe('onSign', () => {
+    const ALGORITHM = RSA_PSS_SIGN_ALGORITHM;
+
+    test('Plaintext should be signed with specified key', async () => {
+      const client = makeAwsClient();
+      const provider = new AwsKmsRsaPssProvider(client);
+
+      await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
+
+      expect(client.send).toHaveBeenCalledWith(expect.any(SignCommand), expect.anything());
+      expect(client.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({ KeyId: PRIVATE_KEY.arn }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    test.each<HashingAlgorithm>(['SHA-256', 'SHA-384', 'SHA-512'])(
+      '%s digest should be supported',
+      async (hashAlgorithm) => {
+        const client = makeAwsClient();
+        const provider = new AwsKmsRsaPssProvider(client);
+        const privateKey = new AwsKmsRsaPssPrivateKey(PRIVATE_KEY.arn, hashAlgorithm, provider);
+
+        await provider.sign(ALGORITHM, privateKey, PLAINTEXT);
+
+        const expectedDigest = await NODEJS_CRYPTO.subtle.digest(hashAlgorithm, PLAINTEXT);
+        const expectedAlgorithm = hashAlgorithm.replace('-', '_');
+        expect(client.send).toHaveBeenCalledWith(
+          expect.objectContaining({
+            input: expect.objectContaining({
+              Message: Buffer.from(expectedDigest),
+              MessageType: 'DIGEST',
+              SigningAlgorithm: `RSASSA_PSS_${expectedAlgorithm}`,
+            }),
+          }),
+          expect.anything(),
+        );
+      },
+    );
+
+    test('Signature should be output', async () => {
+      const provider = new AwsKmsRsaPssProvider(makeAwsClient());
+
+      const signature = (await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT)) as ArrayBuffer;
+
+      expect(Buffer.from(signature)).toEqual(SIGNATURE);
+    });
+
+    test('Non-AWS KMS key should be refused', async () => {
+      const provider = new AwsKmsRsaPssProvider(makeAwsClient());
+      const invalidKey = new CryptoKey();
+
+      await expect(provider.onSign(ALGORITHM, invalidKey, PLAINTEXT)).rejects.toThrowWithMessage(
+        KmsError,
+        'Key is not managed by AWS KMS',
+      );
+    });
+
+    test('Call should time out after 3 seconds', async () => {
+      const client = makeAwsClient();
+      const provider = new AwsKmsRsaPssProvider(client);
+
+      await provider.sign(ALGORITHM, PRIVATE_KEY, PLAINTEXT);
+
+      expect(client.send).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ requestTimeout: 3_000 }),
+      );
+    });
+
+    function makeAwsClient(): KMSClient {
+      const client = new KMSClient({});
+      const response: SignCommandOutput = {
+        $metadata: {},
+        Signature: new Uint8Array(SIGNATURE),
+      };
+      jest.spyOn<KMSClient, any>(client, 'send').mockResolvedValue(response);
+      return client;
+    }
   });
 });
