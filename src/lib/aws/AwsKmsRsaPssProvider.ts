@@ -110,13 +110,8 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     return bufferToArrayBuffer(output.Signature!);
   }
 
-  onVerify(
-    _algorithm: RsaPssParams,
-    _key: CryptoKey,
-    _signature: ArrayBuffer,
-    _data: ArrayBuffer,
-  ): Promise<boolean> {
-    throw new Error('Method not implemented.');
+  async onVerify(): Promise<boolean> {
+    throw new KmsError('Signature verification is unsupported');
   }
 
   private async retrievePublicKey(key: AwsKmsRsaPssPrivateKey): Promise<ArrayBuffer> {

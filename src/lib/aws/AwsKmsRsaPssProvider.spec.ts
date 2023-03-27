@@ -449,4 +449,15 @@ describe('AwsKmsRsaPssProvider', () => {
       return client;
     }
   });
+
+  describe('onVerify', () => {
+    test('Verification should be unsupported', async () => {
+      const provider = new AwsKmsRsaPssProvider(null as any);
+
+      await expect(provider.onVerify()).rejects.toThrowWithMessage(
+        KmsError,
+        'Signature verification is unsupported',
+      );
+    });
+  });
 });
