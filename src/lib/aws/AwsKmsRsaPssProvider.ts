@@ -20,7 +20,7 @@ const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
 const REQUEST_OPTIONS = { requestTimeout: 3_000 };
 
 export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
-  constructor(protected readonly client: KMSClient) {
+  constructor(public readonly client: KMSClient) {
     super();
 
     // See: https://docs.aws.amazon.com/kms/latest/developerguide/asymmetric-key-specs.html

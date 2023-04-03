@@ -1,3 +1,4 @@
+/* tslint:disable:max-classes-per-file */
 import { EnvVarError } from 'env-var';
 
 import { configureMockEnvVars } from '../testUtils/envVars';
@@ -5,17 +6,27 @@ import { initKmsProviderFromEnv } from './init';
 import { GcpKmsConfig } from './gcp/GcpKmsConfig';
 import { KmsError } from './KmsError';
 
-class MockGcpKeyManagementServiceClient {}
+class MockGcpSdkClient {}
+
+class MockAwsSdkClient {
+  constructor(public readonly config: any) {}
+}
 
 let gcpSdkImported = false;
 jest.mock('@google-cloud/kms', () => {
   gcpSdkImported = true;
   return {
-    KeyManagementServiceClient: MockGcpKeyManagementServiceClient,
+    KeyManagementServiceClient: MockGcpSdkClient,
   };
+});
+let awsSdkImported = false;
+jest.mock('@aws-sdk/client-kms', () => {
+  awsSdkImported = true;
+  return { ...jest.requireActual('@aws-sdk/client-kms'), KMSClient: MockAwsSdkClient };
 });
 beforeEach(() => {
   gcpSdkImported = false;
+  awsSdkImported = false;
 });
 
 describe('initKmsProviderFromEnv', () => {
@@ -37,11 +48,15 @@ describe('initKmsProviderFromEnv', () => {
 
   test('Adapters should be imported lazily', async () => {
     expect(gcpSdkImported).toBeFalse();
+    expect(awsSdkImported).toBeFalse();
+
     mockEnvVars(GCP_REQUIRED_ENV_VARS);
-
     await initKmsProviderFromEnv('GCP');
-
     expect(gcpSdkImported).toBeTrue();
+    expect(awsSdkImported).toBeFalse();
+
+    await initKmsProviderFromEnv('AWS');
+    expect(awsSdkImported).toBeTrue();
   });
 
   describe('GPC', () => {
@@ -61,12 +76,12 @@ describe('initKmsProviderFromEnv', () => {
       },
     );
 
-    test('Key store should be returned if env vars are present', async () => {
+    test('Provider should be returned if env vars are present', async () => {
       const provider = await initKmsProviderFromEnv('GCP');
 
       const { GcpKmsRsaPssProvider } = await import('./gcp/GcpKmsRsaPssProvider');
       expect(provider).toBeInstanceOf(GcpKmsRsaPssProvider);
-      expect(provider).toHaveProperty('client', expect.any(MockGcpKeyManagementServiceClient));
+      expect(provider).toHaveProperty('client', expect.any(MockGcpSdkClient));
       expect(provider).toHaveProperty<GcpKmsConfig>('config', {
         keyRing: GCP_REQUIRED_ENV_VARS.GCP_KMS_KEYRING,
         location: GCP_REQUIRED_ENV_VARS.GCP_KMS_LOCATION,
@@ -93,6 +108,37 @@ describe('initKmsProviderFromEnv', () => {
         EnvVarError,
         /GCP_KMS_PROTECTION_LEVEL/,
       );
+    });
+  });
+
+  describe('AWS', () => {
+    test('AWS KMS provider should be output', async () => {
+      const provider = await initKmsProviderFromEnv('AWS');
+
+      const { AwsKmsRsaPssProvider } = await import('./aws/AwsKmsRsaPssProvider');
+      expect(provider).toBeInstanceOf(AwsKmsRsaPssProvider);
+      expect(provider).toHaveProperty('client.config', {
+        endpoint: undefined,
+        region: undefined,
+      });
+    });
+
+    test('AWS_KMS_ENDPOINT should be honoured if present', async () => {
+      const endpoint = 'https://kms.example.com';
+      mockEnvVars({ AWS_KMS_ENDPOINT: endpoint });
+
+      const provider = await initKmsProviderFromEnv('AWS');
+
+      expect(provider).toHaveProperty('client.config.endpoint', endpoint);
+    });
+
+    test('AWS_KMS_REGION should be honoured if present', async () => {
+      const region = 'westeros-3';
+      mockEnvVars({ AWS_KMS_REGION: region });
+
+      const provider = await initKmsProviderFromEnv('AWS');
+
+      expect(provider).toHaveProperty('client.config.region', region);
     });
   });
 });

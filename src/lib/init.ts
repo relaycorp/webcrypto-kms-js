@@ -7,7 +7,8 @@ import { KmsRsaPssProvider } from './KmsRsaPssProvider';
 import { GcpKmsRsaPssProvider } from './gcp/GcpKmsRsaPssProvider';
 
 const INITIALISERS: { readonly [key: string]: () => Promise<KmsRsaPssProvider> } = {
-  GCP: initGCPKeystore,
+  AWS: initAwsProvider,
+  GCP: initGcpProvider,
 };
 
 export async function initKmsProviderFromEnv(adapter: string): Promise<KmsRsaPssProvider> {
@@ -18,7 +19,19 @@ export async function initKmsProviderFromEnv(adapter: string): Promise<KmsRsaPss
   return init();
 }
 
-export async function initGCPKeystore(): Promise<KmsRsaPssProvider> {
+export async function initAwsProvider(): Promise<KmsRsaPssProvider> {
+  // Avoid import-time side effects (e.g., expensive API calls)
+  const { AwsKmsRsaPssProvider } = await import('./aws/AwsKmsRsaPssProvider');
+  const { KMSClient } = await import('@aws-sdk/client-kms');
+  return new AwsKmsRsaPssProvider(
+    new KMSClient({
+      endpoint: getEnvVar('AWS_KMS_ENDPOINT').asString(),
+      region: getEnvVar('AWS_KMS_REGION').asString(),
+    }),
+  );
+}
+
+export async function initGcpProvider(): Promise<KmsRsaPssProvider> {
   const kmsConfig: GcpKmsConfig = {
     location: getEnvVar('GCP_KMS_LOCATION').required().asString(),
     keyRing: getEnvVar('GCP_KMS_KEYRING').required().asString(),
