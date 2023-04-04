@@ -15,7 +15,6 @@ const PLAINTEXT = Buffer.from('this is the plaintext');
 if (!process.env.GOOGLE_APPLICATION_CREDENTIALS) {
   throw new Error('GOOGLE_APPLICATION_CREDENTIALS must be defined');
 }
-process.env.GCP_KMS_PROTECTION_LEVEL = 'SOFTWARE';
 
 let gcpProvider: KmsRsaPssProvider;
 let keyPair: CryptoKeyPair;

@@ -12,5 +12,6 @@ The integration tests aren't currently run on CI, and can be run with `npm run t
   - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (required), using a service account. All GCP resources will be created within the same project where the service account lives. The GCP service account should be allowed to manage KMS resources.
   - `GCP_KMS_KEYRING`.
   - `GCP_KMS_LOCATION` (e.g., `europe-west3`).
+  - `GCP_KMS_PROTECTION_LEVEL` (e.g., `SOFTWARE`).
 
 The test suite will automatically delete all the resources it created, except for those that can't be deleted (e.g., GPC KMS key rings). Existing resources are not modified. However, this may not always be true due to bugs, so **always create a brand new, temporary GCP project**.
