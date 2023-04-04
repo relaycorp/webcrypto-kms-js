@@ -770,3 +770,15 @@ describe('onVerify', () => {
     );
   });
 });
+
+describe('close', () => {
+  test('Client should be closed', async () => {
+    const client = new KeyManagementServiceClient();
+    const mockClose = jest.spyOn(client, 'close').mockResolvedValue(undefined);
+    const provider = new GcpKmsRsaPssProvider(client, KMS_CONFIG);
+
+    await provider.close();
+
+    expect(mockClose).toHaveBeenCalledWith();
+  });
+});

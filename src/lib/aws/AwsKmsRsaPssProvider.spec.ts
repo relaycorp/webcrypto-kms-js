@@ -460,4 +460,16 @@ describe('AwsKmsRsaPssProvider', () => {
       );
     });
   });
+
+  describe('close', () => {
+    test('Client should be destroyed', async () => {
+      const client = new KMSClient({});
+      const mockDestroy = jest.spyOn(client, 'destroy').mockReturnValue(undefined);
+      const provider = new AwsKmsRsaPssProvider(client);
+
+      await provider.close();
+
+      expect(mockDestroy).toHaveBeenCalledWith();
+    });
+  });
 });
