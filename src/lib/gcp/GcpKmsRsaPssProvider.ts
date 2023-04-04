@@ -84,9 +84,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
   }
 
   public async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer> {
-    if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
-      throw new KmsError('Key is not managed by GCP KMS');
-    }
+    requireGcpKmsKey(key);
 
     let keySerialised: ArrayBuffer;
     if (format === 'spki') {
@@ -105,9 +103,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     key: CryptoKey,
     data: ArrayBuffer,
   ): Promise<ArrayBuffer> {
-    if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
-      throw new KmsError(`Cannot sign with key of unsupported type (${key.constructor.name})`);
-    }
+    requireGcpKmsKey(key);
 
     if (!SUPPORTED_SALT_LENGTHS.includes(algorithm.saltLength)) {
       throw new KmsError(`Unsupported salt length of ${algorithm.saltLength} octets`);
@@ -120,7 +116,16 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     throw new KmsError('Signature verification is unsupported');
   }
 
-  async close(): Promise<void> {
+  public async destroyKey(key: CryptoKey): Promise<void> {
+    requireGcpKmsKey(key);
+
+    await wrapGCPCallError(
+      this.client.destroyCryptoKeyVersion({ name: key.kmsKeyVersionPath }, REQUEST_OPTIONS),
+      'Key destruction failed',
+    );
+  }
+
+  public async close(): Promise<void> {
     await this.client.close();
   }
 
@@ -192,6 +197,12 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
       throw new KmsError('Signature CRC32C checksum does not match one received from KMS');
     }
     return bufferToArrayBuffer(signature);
+  }
+}
+
+function requireGcpKmsKey(key: CryptoKey): asserts key is GcpKmsRsaPssPrivateKey {
+  if (!(key instanceof GcpKmsRsaPssPrivateKey)) {
+    throw new KmsError(`Only GCP KMS keys are supported (got ${key.constructor.name})`);
   }
 }
 

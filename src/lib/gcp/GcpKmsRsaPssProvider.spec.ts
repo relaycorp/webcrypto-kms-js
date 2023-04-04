@@ -519,13 +519,13 @@ describe('onExportKey', () => {
     }
   });
 
-  test('Non-KMS key should be refused', async () => {
+  test('Non-GCP key should be refused', async () => {
     const provider = new GcpKmsRsaPssProvider(null as any, KMS_CONFIG);
     const invalidKey = new CryptoKey();
 
     await expect(provider.onExportKey('spki', invalidKey)).rejects.toThrowWithMessage(
       KmsError,
-      'Key is not managed by GCP KMS',
+      `Only GCP KMS keys are supported (got ${invalidKey.constructor.name})`,
     );
   });
 });
@@ -579,14 +579,14 @@ describe('onImportKey', () => {
 describe('onSign', () => {
   const ALGORITHM = RSA_PSS_SIGN_ALGORITHM;
 
-  test('Non-KMS key should be refused', async () => {
+  test('Non-GCP key should be refused', async () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
     const invalidKey = CryptoKey.create({ name: 'RSA-PSS' }, 'private', true, ['sign']);
 
     await expect(provider.sign(ALGORITHM, invalidKey, PLAINTEXT)).rejects.toThrowWithMessage(
       KmsError,
-      `Cannot sign with key of unsupported type (${invalidKey.constructor.name})`,
+      `Only GCP KMS keys are supported (got ${invalidKey.constructor.name})`,
     );
 
     expect(kmsClient.asymmetricSign).not.toHaveBeenCalled();
@@ -769,6 +769,75 @@ describe('onVerify', () => {
       'Signature verification is unsupported',
     );
   });
+});
+
+describe('destroyKey', () => {
+  test('Non-GCP KMS key should be refused', async () => {
+    const invalidKey = CryptoKey.create({ name: 'RSA-PSS' }, 'private', true, ['sign']);
+
+    const provider = new GcpKmsRsaPssProvider(makeKmsClient(), KMS_CONFIG);
+
+    await expect(provider.destroyKey(invalidKey)).rejects.toThrowWithMessage(
+      KmsError,
+      `Only GCP KMS keys are supported (got ${invalidKey.constructor.name})`,
+    );
+  });
+
+  test('Specified GCP KMS key should be destroyed', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+    await provider.destroyKey(PRIVATE_KEY);
+
+    expect(kmsClient.destroyCryptoKeyVersion).toHaveBeenCalledWith(
+      expect.objectContaining({ name: PRIVATE_KEY.kmsKeyVersionPath }),
+      expect.anything(),
+    );
+  });
+
+  test('Request should time out after 3 seconds', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+    await provider.destroyKey(PRIVATE_KEY);
+
+    expect(kmsClient.destroyCryptoKeyVersion).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ timeout: 3_000 }),
+    );
+  });
+
+  test('Request should be retried', async () => {
+    const kmsClient = makeKmsClient();
+    const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
+
+    await provider.destroyKey(PRIVATE_KEY);
+
+    expect(kmsClient.destroyCryptoKeyVersion).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ maxRetries: 10 }),
+    );
+  });
+
+  test('API call errors should be wrapped', async () => {
+    const callError = new Error('Bruno. There. I said it.');
+    const client = makeKmsClient();
+    getMockInstance(client.destroyCryptoKeyVersion).mockRejectedValue(callError);
+    const provider = new GcpKmsRsaPssProvider(client, KMS_CONFIG);
+
+    const error = await catchPromiseRejection(provider.destroyKey(PRIVATE_KEY), KmsError);
+
+    expect(error.message).toBe('Key destruction failed');
+    expect(error.cause).toBe(callError);
+  });
+
+  function makeKmsClient(): KeyManagementServiceClient {
+    const kmsClient = new KeyManagementServiceClient();
+    jest
+      .spyOn(kmsClient, 'destroyCryptoKeyVersion')
+      .mockImplementation(async () => [undefined, undefined, undefined]);
+    return kmsClient;
+  }
 });
 
 describe('close', () => {
