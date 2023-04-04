@@ -4,8 +4,8 @@ This library extends [`webcrypto-core`](https://www.npmjs.com/package/webcrypto-
 
 This is an alternative to:
 
-- The Key Management Interoperability Protocol (KMIP), if you don't want to run another server.
-- PKCS#11, if you prefer to use official cloud SDKs instead of C libraries. This configures authentication automatically, and makes it possible to use telemetry.
+- The [Key Management Interoperability Protocol (KMIP)](https://en.wikipedia.org/wiki/Key_Management_Interoperability_Protocol), if you don't want to run another server.
+- [PKCS#11](https://en.wikipedia.org/wiki/PKCS_11), if you prefer to use official cloud SDKs instead of C libraries. This configures authentication automatically, and makes it possible to use telemetry.
 
 ## Usage
 
