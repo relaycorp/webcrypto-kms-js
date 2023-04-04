@@ -49,7 +49,7 @@ The following environment variables must be defined depending on the adapter:
 
 ## Integration test suite
 
-The integration tests aren't currently run on CI, and can be run with `npm run test:integration:local`. Note that some environments variables must be set, and others are optional:
+The integration tests aren't currently run on CI, and can be run with `npm run test:integration:local`.
 
 All GCP resources will be created within the same project where the service account lives. The GCP service account should be allowed to manage KMS resources.
 
