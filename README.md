@@ -38,7 +38,7 @@ The following environment variables must be defined depending on the adapter:
   - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (required).
   - `GCP_KMS_KEYRING` (required).
   - `GCP_KMS_LOCATION` (required; e.g., `europe-west3`).
-  - `GCP_KMS_PROTECTION_LEVEL` (required; e.g., `SOFTWARE`).
+  - `GCP_KMS_PROTECTION_LEVEL` (required; i.e., `SOFTWARE` or `HSM`).
 
 ## Additional methods
 
