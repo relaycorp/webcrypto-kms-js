@@ -120,6 +120,10 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     throw new KmsError('Signature verification is unsupported');
   }
 
+  async close(): Promise<void> {
+    await this.client.close();
+  }
+
   private async getGCPProjectId(): Promise<string> {
     // GCP client library already caches the project id.
     return this.client.getProjectId();

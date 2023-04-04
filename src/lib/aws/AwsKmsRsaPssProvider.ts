@@ -114,6 +114,10 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     throw new KmsError('Signature verification is unsupported');
   }
 
+  async close(): Promise<void> {
+    this.client.destroy();
+  }
+
   private async retrievePublicKey(key: AwsKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
     const command = new GetPublicKeyCommand({ KeyId: key.arn });
     const response = await this.client.send(command, REQUEST_OPTIONS);
