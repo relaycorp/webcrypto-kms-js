@@ -32,8 +32,8 @@ async function init(): Promise<KmsRsaPssProvider> {
 The following environment variables must be defined depending on the adapter:
 
 - AWS adapter:
-  - `AWS_KMS_ENDPOINT` (optional).
-  - `AWS_KMS_REGION` (optional).
+  - `AWS_KMS_ENDPOINT` (optional when running on AWS infrastructure).
+  - `AWS_KMS_REGION` (optional when running on AWS infrastructure).
 - GCP adapter:
   - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (optional when running on GCP infrastructure).
   - `GCP_KMS_KEYRING` (required).
