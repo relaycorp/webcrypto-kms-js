@@ -3,6 +3,7 @@ import {
   GetPublicKeyCommand,
   KeyUsageType,
   KMSClient,
+  ScheduleKeyDeletionCommand,
   SignCommand,
 } from '@aws-sdk/client-kms';
 import { CryptoKey } from 'webcrypto-core';
@@ -57,9 +58,7 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
   }
 
   async onExportKey(format: KeyFormat, key: CryptoKey): Promise<ArrayBuffer | JsonWebKey> {
-    if (!(key instanceof AwsKmsRsaPssPrivateKey)) {
-      throw new KmsError('Key is not managed by AWS KMS');
-    }
+    requireAwsKmsKey(key);
 
     let keySerialised: ArrayBuffer;
     if (format === 'raw') {
@@ -92,9 +91,7 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
   }
 
   async onSign(_algorithm: RsaPssParams, key: CryptoKey, data: ArrayBuffer): Promise<ArrayBuffer> {
-    if (!(key instanceof AwsKmsRsaPssPrivateKey)) {
-      throw new KmsError('Key is not managed by AWS KMS');
-    }
+    requireAwsKmsKey(key);
 
     const hashingAlgorithm = (key.algorithm as RsaHashedKeyAlgorithm).hash.name;
     const digest = await hash(data, hashingAlgorithm as HashingAlgorithm);
@@ -114,6 +111,12 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     throw new KmsError('Signature verification is unsupported');
   }
 
+  async destroyKey(key: CryptoKey): Promise<void> {
+    requireAwsKmsKey(key);
+    const command = new ScheduleKeyDeletionCommand({ KeyId: key.arn });
+    await this.client.send(command, REQUEST_OPTIONS);
+  }
+
   async close(): Promise<void> {
     this.client.destroy();
   }
@@ -122,5 +125,11 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     const command = new GetPublicKeyCommand({ KeyId: key.arn });
     const response = await this.client.send(command, REQUEST_OPTIONS);
     return bufferToArrayBuffer(response.PublicKey!);
+  }
+}
+
+function requireAwsKmsKey(key: CryptoKey): asserts key is AwsKmsRsaPssPrivateKey {
+  if (!(key instanceof AwsKmsRsaPssPrivateKey)) {
+    throw new KmsError(`Only AWS KMS keys are supported (got ${key.constructor.name})`);
   }
 }
