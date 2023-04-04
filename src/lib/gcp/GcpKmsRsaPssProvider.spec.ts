@@ -509,6 +509,7 @@ describe('onExportKey', () => {
     }
 
     class MockGCPError extends Error {
+      // noinspection JSMismatchedCollectionQueryUpdate
       public readonly statusDetails: readonly any[];
 
       constructor(message: string, violationType: string) {
