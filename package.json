@@ -16,7 +16,9 @@
   "keywords": [
     "kms",
     "gcp",
-    "gcp-kms"
+    "gcp-kms",
+    "aws",
+    "aws-kms"
   ],
   "scripts": {
     "build": "run-s clean && run-p build:*",

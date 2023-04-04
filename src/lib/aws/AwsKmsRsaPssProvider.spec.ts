@@ -5,6 +5,8 @@ import {
   GetPublicKeyCommandOutput,
   KeyUsageType,
   KMSClient,
+  ScheduleKeyDeletionCommand,
+  ScheduleKeyDeletionCommandOutput,
   SignCommand,
   SignCommandOutput,
 } from '@aws-sdk/client-kms';
@@ -302,13 +304,13 @@ describe('AwsKmsRsaPssProvider', () => {
       });
     });
 
-    test('Non-KMS key should be refused', async () => {
+    test('Non-AWS key should be refused', async () => {
       const provider = new AwsKmsRsaPssProvider(makeAwsClient());
       const invalidKey = new CryptoKey();
 
       await expect(provider.onExportKey('spki', invalidKey)).rejects.toThrowWithMessage(
         KmsError,
-        'Key is not managed by AWS KMS',
+        `Only AWS KMS keys are supported (got ${invalidKey.constructor.name})`,
       );
     });
 
@@ -423,7 +425,7 @@ describe('AwsKmsRsaPssProvider', () => {
 
       await expect(provider.onSign(ALGORITHM, invalidKey, PLAINTEXT)).rejects.toThrowWithMessage(
         KmsError,
-        'Key is not managed by AWS KMS',
+        `Only AWS KMS keys are supported (got ${invalidKey.constructor.name})`,
       );
     });
 
@@ -459,6 +461,59 @@ describe('AwsKmsRsaPssProvider', () => {
         'Signature verification is unsupported',
       );
     });
+  });
+
+  describe('destroyKey', () => {
+    test('Non-AWS KMS key should be refused', async () => {
+      const client = makeAwsClient();
+      const provider = new AwsKmsRsaPssProvider(client);
+      const invalidKey = new CryptoKey();
+
+      await expect(provider.destroyKey(invalidKey)).rejects.toThrowWithMessage(
+        KmsError,
+        `Only AWS KMS keys are supported (got ${invalidKey.constructor.name})`,
+      );
+      expect(client.send).not.toHaveBeenCalled();
+    });
+
+    test('Specified key should be destroyed', async () => {
+      const client = makeAwsClient();
+      const provider = new AwsKmsRsaPssProvider(client);
+
+      await provider.destroyKey(PRIVATE_KEY);
+
+      expect(client.send).toHaveBeenCalledWith(
+        expect.any(ScheduleKeyDeletionCommand),
+        expect.anything(),
+      );
+      expect(client.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({ KeyId: PRIVATE_KEY.arn }),
+        }),
+        expect.anything(),
+      );
+    });
+
+    test('Call should time out after 3 seconds', async () => {
+      const client = makeAwsClient();
+      const provider = new AwsKmsRsaPssProvider(client);
+
+      await provider.destroyKey(PRIVATE_KEY);
+
+      expect(client.send).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ requestTimeout: 3_000 }),
+      );
+    });
+
+    function makeAwsClient(): KMSClient {
+      const client = new KMSClient({});
+      const response: ScheduleKeyDeletionCommandOutput = {
+        $metadata: {},
+      };
+      jest.spyOn<KMSClient, any>(client, 'send').mockResolvedValue(response);
+      return client;
+    }
   });
 
   describe('close', () => {

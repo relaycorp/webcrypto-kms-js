@@ -2,3 +2,4 @@
 // call APIs).
 
 export { initKmsProviderFromEnv } from './lib/init';
+export { KmsRsaPssProvider } from './lib/KmsRsaPssProvider';
