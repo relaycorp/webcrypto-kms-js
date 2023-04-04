@@ -1,6 +1,6 @@
 # WebCrypto-compatible client for Key Management Services like GCP KMS
 
-This library extends [`webcrypto-core`](https://www.npmjs.com/package/webcrypto-core) to abstract the communication with KMSs, allowing you to use the same code to communicate with different KMSs. We currently support [GCP KMS](https://cloud.google.com/security-key-management) and [AWS KMS](https://aws.amazon.com/kms/).
+This library extends [`webcrypto-core`](https://www.npmjs.com/package/webcrypto-core) to abstract the communication with KMSs, allowing you to use the same code to communicate with different KMSs. We currently support [GCP KMS](https://cloud.google.com/security-key-management) and [AWS KMS](https://aws.amazon.com/kms/), and we welcome PRs to support additional KMSs.
 
 This is an alternative to:
 
