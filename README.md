@@ -35,7 +35,7 @@ The following environment variables must be defined depending on the adapter:
   - `AWS_KMS_ENDPOINT` (optional).
   - `AWS_KMS_REGION` (optional).
 - GCP adapter:
-  - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (required).
+  - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (optional when running on GCP infrastructure).
   - `GCP_KMS_KEYRING` (required).
   - `GCP_KMS_LOCATION` (required; e.g., `europe-west3`).
   - `GCP_KMS_PROTECTION_LEVEL` (required; i.e., `SOFTWARE` or `HSM`).
