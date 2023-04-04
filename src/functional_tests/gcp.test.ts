@@ -1,4 +1,3 @@
-import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { constants, createVerify } from 'crypto';
 
 import { initKmsProviderFromEnv, KmsRsaPssProvider } from '../index';
@@ -20,12 +19,7 @@ let gcpProvider: KmsRsaPssProvider;
 let keyPair: CryptoKeyPair;
 beforeAll(async () => {
   gcpProvider = await initKmsProviderFromEnv('GCP');
-  const kmsClient = new KeyManagementServiceClient();
-  await createKeyRingIfMissing(
-    process.env.GCP_KMS_KEYRING!,
-    kmsClient,
-    process.env.GCP_KMS_LOCATION!,
-  );
+  await createKeyRingIfMissing(process.env.GCP_KMS_KEYRING!, process.env.GCP_KMS_LOCATION!);
 
   keyPair = await gcpProvider.generateKey(RSA_PSS_CREATION_ALGORITHM, true, ['sign', 'verify']);
 });

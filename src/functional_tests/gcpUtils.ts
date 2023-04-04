@@ -1,10 +1,7 @@
-import type { KeyManagementServiceClient } from '@google-cloud/kms';
+import { KeyManagementServiceClient } from '@google-cloud/kms';
 
-export async function createKeyRingIfMissing(
-  keyRingId: string,
-  kmsClient: KeyManagementServiceClient,
-  location: string,
-): Promise<string> {
+export async function createKeyRingIfMissing(keyRingId: string, location: string): Promise<string> {
+  const kmsClient = new KeyManagementServiceClient();
   const project = await kmsClient.getProjectId();
   const keyRingName = kmsClient.keyRingPath(project, location, keyRingId);
   try {
@@ -18,5 +15,7 @@ export async function createKeyRingIfMissing(
     const locationPath = kmsClient.locationPath(project, location);
     await kmsClient.createKeyRing({ parent: locationPath, keyRingId });
   }
+
+  await kmsClient.close();
   return keyRingName;
 }
