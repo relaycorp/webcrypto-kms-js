@@ -53,4 +53,10 @@ The integration tests aren't currently run on CI, and can be run with `npm run t
 
 All GCP resources will be created within the same project where the service account lives. The GCP service account should be allowed to manage KMS resources.
 
+Before running the AWS KMS tests, you need to start a mock AWS KMS server locally using docker:
+
+```bash
+docker run --rm -p 8080:8080 nsmithuk/local-kms
+```
+
 The test suite will automatically delete all the resources it created, except for those that can't be deleted (e.g., GPC KMS key rings). Existing resources are not modified. However, this may not always be true due to bugs, so **always create a brand new, temporary GCP project**.
