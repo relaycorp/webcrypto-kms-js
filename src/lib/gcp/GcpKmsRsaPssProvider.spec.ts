@@ -783,7 +783,7 @@ describe('destroyKey', () => {
     );
   });
 
-  test('Specified GCP KMS key should be destroyed', async () => {
+  test('Specified key should be destroyed', async () => {
     const kmsClient = makeKmsClient();
     const provider = new GcpKmsRsaPssProvider(kmsClient, KMS_CONFIG);
 
