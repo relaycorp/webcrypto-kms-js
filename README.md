@@ -32,6 +32,7 @@ async function init(): Promise<KmsRsaPssProvider> {
 The following environment variables must be defined depending on the adapter:
 
 - AWS adapter:
+  - [`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`](https://docs.aws.amazon.com/sdk-for-javascript/v3/developer-guide/loading-node-credentials-environment.html) (optional when running on AWS infrastructure).
   - `AWS_KMS_ENDPOINT` (optional when running on AWS infrastructure).
   - `AWS_KMS_REGION` (optional when running on AWS infrastructure).
 - GCP adapter:
