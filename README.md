@@ -1,17 +1,56 @@
 # WebCrypto-compatible client for Key Management Services like GCP KMS
 
-This library extends [`webcrypto-core`](https://www.npmjs.com/package/webcrypto-core) to abstract the communication with KMSs (e.g., [GCP KMS](https://cloud.google.com/security-key-management)), allowing you to use the same code to communicate with different KMSs.
+This library extends [`webcrypto-core`](https://www.npmjs.com/package/webcrypto-core) to abstract the communication with KMSs, allowing you to use the same code to communicate with different KMSs. We currently support [GCP KMS](https://cloud.google.com/security-key-management) and [AWS KMS](https://aws.amazon.com/kms/).
 
-This is an alternative to the Key Management Interoperability Protocol (KMIP) and PKCS#11. TODO: Explain why.
+This is an alternative to:
 
-### Integration test suite
+- The Key Management Interoperability Protocol (KMIP), if you don't want to run another server.
+- PKCS#11, if you prefer to use official cloud SDKs instead of C libraries. This configures authentication automatically, and makes it possible to use telemetry.
+
+## Usage
+
+The library is available on NPM as [`@relaycorp/webcrypto-kms`](https://www.npmjs.com/package/@relaycorp/webcrypto-kms), and you can install it as follows:
+
+```
+npm i @relaycorp/webcrypto-kms
+```
+
+### Initialising the private key store
+
+The configuration of the adapter is done via environment variables, so the actual initialisation of the store is done with a simple function call:
+
+```typescript
+import { initKmsProviderFromEnv, KmsRsaPssProvider } from '@relaycorp/webcrypto-kms';
+
+async function init(): Promise<KmsRsaPssProvider> {
+  return initKmsProviderFromEnv(process.env.KMS_ADAPTER);
+}
+```
+
+`initKmsProviderFromEnv()` can be called with `'AWS'` or `'GCP'`.
+
+The following environment variables must be defined depending on the adapter:
+
+- AWS adapter:
+  - `AWS_KMS_ENDPOINT` (optional).
+  - `AWS_KMS_REGION` (optional).
+- GCP adapter:
+  - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (required).
+  - `GCP_KMS_KEYRING` (required).
+  - `GCP_KMS_LOCATION` (required; e.g., `europe-west3`).
+  - `GCP_KMS_PROTECTION_LEVEL` (required; e.g., `SOFTWARE`).
+
+## Additional methods
+
+`KmsRsaPssProvider` exposes the following additional methods:
+
+- `destroyKey(privateKey)`: Destroys the specified private key.
+- `close()`: Closes the underlying network resources, when the provider is no longer needed.
+
+## Integration test suite
 
 The integration tests aren't currently run on CI, and can be run with `npm run test:integration:local`. Note that some environments variables must be set, and others are optional:
 
-- GCP adapter:
-  - [`GOOGLE_APPLICATION_CREDENTIALS`](https://cloud.google.com/docs/authentication/getting-started) (required), using a service account. All GCP resources will be created within the same project where the service account lives. The GCP service account should be allowed to manage KMS resources.
-  - `GCP_KMS_KEYRING`.
-  - `GCP_KMS_LOCATION` (e.g., `europe-west3`).
-  - `GCP_KMS_PROTECTION_LEVEL` (e.g., `SOFTWARE`).
+All GCP resources will be created within the same project where the service account lives. The GCP service account should be allowed to manage KMS resources.
 
 The test suite will automatically delete all the resources it created, except for those that can't be deleted (e.g., GPC KMS key rings). Existing resources are not modified. However, this may not always be true due to bugs, so **always create a brand new, temporary GCP project**.
