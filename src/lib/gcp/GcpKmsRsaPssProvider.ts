@@ -1,4 +1,4 @@
-import { KeyManagementServiceClient } from '@google-cloud/kms';
+import type { KeyManagementServiceClient } from '@google-cloud/kms';
 import { calculate as calculateCRC32C } from 'fast-crc32c';
 import { CryptoKey } from 'webcrypto-core';
 import uuid4 from 'uuid4';
@@ -33,7 +33,7 @@ const DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS = 86_400; // One day; the minim
 const REQUEST_OPTIONS = { timeout: 3_000, maxRetries: 10 };
 
 export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
-  constructor(public kmsClient: KeyManagementServiceClient, protected kmsConfig: GcpKmsConfig) {
+  constructor(public client: KeyManagementServiceClient, public config: GcpKmsConfig) {
     super();
 
     // See: https://cloud.google.com/kms/docs/algorithms#rsa_signing_algorithms
@@ -50,10 +50,10 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     const cryptoKeyId = uuid4();
     await this.createCryptoKey(algorithm, projectId, cryptoKeyId);
 
-    const kmsKeyVersionPath = this.kmsClient.cryptoKeyVersionPath(
+    const kmsKeyVersionPath = this.client.cryptoKeyVersionPath(
       projectId,
-      this.kmsConfig.location,
-      this.kmsConfig.keyRing,
+      this.config.location,
+      this.config.keyRing,
       cryptoKeyId,
       '1',
     );
@@ -90,7 +90,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
 
     let keySerialised: ArrayBuffer;
     if (format === 'spki') {
-      keySerialised = await retrieveKMSPublicKey(key.kmsKeyVersionPath, this.kmsClient);
+      keySerialised = await retrieveKMSPublicKey(key.kmsKeyVersionPath, this.client);
     } else if (format === 'raw') {
       const pathEncoded = Buffer.from(key.kmsKeyVersionPath);
       keySerialised = bufferToArrayBuffer(pathEncoded);
@@ -120,9 +120,13 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     throw new KmsError('Signature verification is unsupported');
   }
 
+  async close(): Promise<void> {
+    await this.client.close();
+  }
+
   private async getGCPProjectId(): Promise<string> {
     // GCP client library already caches the project id.
-    return this.kmsClient.getProjectId();
+    return this.client.getProjectId();
   }
 
   private async createCryptoKey(
@@ -131,15 +135,14 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
     cryptoKeyId: string,
   ): Promise<void> {
     const kmsAlgorithm = getKmsAlgorithm(algorithm);
-    const keyRingName = this.kmsClient.keyRingPath(
+    const keyRingName = this.client.keyRingPath(
       projectId,
-      this.kmsConfig.location,
-      this.kmsConfig.keyRing,
+      this.config.location,
+      this.config.keyRing,
     );
     const destroyScheduledDuration = {
       seconds:
-        this.kmsConfig.destroyScheduledDurationSeconds ??
-        DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS,
+        this.config.destroyScheduledDurationSeconds ?? DEFAULT_DESTROY_SCHEDULED_DURATION_SECONDS,
     };
     const creationOptions = {
       cryptoKey: {
@@ -147,7 +150,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
         purpose: 'ASYMMETRIC_SIGN',
         versionTemplate: {
           algorithm: kmsAlgorithm as any,
-          protectionLevel: this.kmsConfig.protectionLevel,
+          protectionLevel: this.config.protectionLevel,
         },
       },
       cryptoKeyId,
@@ -155,7 +158,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
       skipInitialVersionCreation: false,
     } as const;
     await wrapGCPCallError(
-      this.kmsClient.createCryptoKey(creationOptions, REQUEST_OPTIONS),
+      this.client.createCryptoKey(creationOptions, REQUEST_OPTIONS),
       'Failed to create key',
     );
   }
@@ -171,7 +174,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
   private async kmsSign(plaintext: Buffer, key: GcpKmsRsaPssPrivateKey): Promise<ArrayBuffer> {
     const plaintextChecksum = calculateCRC32C(plaintext);
     const [response] = await wrapGCPCallError(
-      this.kmsClient.asymmetricSign(
+      this.client.asymmetricSign(
         { data: plaintext, dataCrc32c: { value: plaintextChecksum }, name: key.kmsKeyVersionPath },
         REQUEST_OPTIONS,
       ),
