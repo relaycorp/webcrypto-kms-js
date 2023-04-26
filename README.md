@@ -41,12 +41,14 @@ The following environment variables must be defined depending on the adapter:
   - `GCP_KMS_LOCATION` (required; e.g., `europe-west3`).
   - `GCP_KMS_PROTECTION_LEVEL` (required; i.e., `SOFTWARE` or `HSM`).
 
-## Additional methods
+## Additional members
 
 `KmsRsaPssProvider` exposes the following additional methods:
 
 - `destroyKey(privateKey)`: Destroys the specified private key.
 - `close()`: Closes the underlying network resources, when the provider is no longer needed.
+
+Private keys from this library additionally expose their respective provider in the property `provider`. This may be useful when you don't want or can't manage a global registry of providers. This functionality is supported by [`@relaycorp/veraid`](https://www.npmjs.com/package/@relaycorp/veraid), for example.
 
 ## Integration test suite
 
