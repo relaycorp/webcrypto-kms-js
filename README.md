@@ -48,7 +48,7 @@ The following environment variables must be defined depending on the adapter:
 - `destroyKey(privateKey)`: Destroys the specified private key.
 - `close()`: Closes the underlying network resources, when the provider is no longer needed.
 
-Private keys from this library additionally expose their respective provider in the property `provider`. This may be useful when you don't want or can't manage a global registry of providers. This functionality is supported by [`@relaycorp/veraid`](https://www.npmjs.com/package/@relaycorp/veraid), for example.
+Private keys from this library additionally expose their respective provider in the property `provider`. This may be useful when you don't want to or can't manage a global registry of providers. This functionality is supported by [`@relaycorp/veraid`](https://www.npmjs.com/package/@relaycorp/veraid), for example.
 
 ## Integration test suite
 
