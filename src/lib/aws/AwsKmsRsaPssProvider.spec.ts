@@ -249,7 +249,7 @@ describe('AwsKmsRsaPssProvider', () => {
 
         await expect(provider.onExportKey(format, PRIVATE_KEY)).rejects.toThrowWithMessage(
           KmsError,
-          'Private key cannot be exported',
+          `Private key cannot be exported as ${format}`,
         );
       },
     );

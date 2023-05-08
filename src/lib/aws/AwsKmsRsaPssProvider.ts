@@ -67,7 +67,7 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     } else if (format === 'spki') {
       keySerialised = await this.retrievePublicKey(key);
     } else {
-      throw new KmsError('Private key cannot be exported');
+      throw new KmsError(`Private key cannot be exported as ${format}`);
     }
 
     return keySerialised;

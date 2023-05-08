@@ -93,7 +93,7 @@ export class GcpKmsRsaPssProvider extends KmsRsaPssProvider {
       const pathEncoded = Buffer.from(key.kmsKeyVersionPath);
       keySerialised = bufferToArrayBuffer(pathEncoded);
     } else {
-      throw new KmsError('Private key cannot be exported');
+      throw new KmsError(`Private key cannot be exported as ${format}`);
     }
     return keySerialised;
   }
