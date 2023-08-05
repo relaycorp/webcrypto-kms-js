@@ -51,7 +51,7 @@
     "webcrypto-core": "^1.7.6"
   },
   "devDependencies": {
-    "@relaycorp/shared-config": "^1.9.4",
+    "@relaycorp/shared-config": "^1.14.1",
     "@types/jest": "^29.5.3",
     "@types/uuid4": "^2.0.0",
     "del-cli": "^5.0.0",
