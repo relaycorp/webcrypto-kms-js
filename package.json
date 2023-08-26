@@ -42,7 +42,7 @@
     "node": ">=16"
   },
   "dependencies": {
-    "@aws-sdk/client-kms": "^3.388.0",
+    "@aws-sdk/client-kms": "^3.395.0",
     "@google-cloud/kms": "^3.8.0",
     "@peculiar/webcrypto": "^1.4.3",
     "env-var": "^7.4.0",
