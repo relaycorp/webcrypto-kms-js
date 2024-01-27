@@ -48,7 +48,7 @@
     "env-var": "^7.4.1",
     "fast-crc32c": "^2.0.0",
     "uuid4": "^2.0.3",
-    "webcrypto-core": "^1.7.6"
+    "webcrypto-core": "^1.7.8"
   },
   "devDependencies": {
     "@relaycorp/shared-config": "^1.14.1",
