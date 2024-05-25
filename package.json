@@ -45,7 +45,7 @@
     "@aws-sdk/client-kms": "^3.428.0",
     "@google-cloud/kms": "^4.4.0",
     "@peculiar/webcrypto": "^1.4.6",
-    "env-var": "^7.4.2",
+    "env-var": "^7.5.0",
     "fast-crc32c": "^2.0.0",
     "uuid4": "^2.0.3",
     "webcrypto-core": "^1.7.8"
