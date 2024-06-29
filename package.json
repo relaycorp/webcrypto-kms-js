@@ -43,7 +43,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-kms": "^3.428.0",
-    "@google-cloud/kms": "^4.4.0",
+    "@google-cloud/kms": "^4.5.0",
     "@peculiar/webcrypto": "^1.5.0",
     "env-var": "^7.5.0",
     "fast-crc32c": "^2.0.0",
