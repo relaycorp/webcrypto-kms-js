@@ -1,7 +1,4 @@
-import { constants, createVerify } from 'crypto';
-
-import { derSerializePublicKey } from '../testUtils/webcrypto';
-import { derPublicKeyToPem } from '../testUtils/asn1';
+import { NODEJS_CRYPTO, RSA_PSS_SIGN_ALGORITHM } from '../testUtils/webcrypto';
 
 export const PLAINTEXT = Buffer.from('this is the plaintext');
 
@@ -10,13 +7,10 @@ export async function verifyAsymmetricSignature(
   signature: ArrayBuffer,
   plaintext: Buffer,
 ): Promise<boolean> {
-  const verify = createVerify('sha256');
-  verify.update(plaintext);
-  verify.end();
-
-  const publicKeyDer = await derSerializePublicKey(publicKey);
-  return verify.verify(
-    { key: derPublicKeyToPem(publicKeyDer), padding: constants.RSA_PKCS1_PSS_PADDING },
-    new Uint8Array(signature),
+  return await NODEJS_CRYPTO.subtle.verify(
+    RSA_PSS_SIGN_ALGORITHM,
+    publicKey,
+    signature,
+    plaintext.buffer,
   );
 }
