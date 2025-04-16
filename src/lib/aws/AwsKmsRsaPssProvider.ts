@@ -1,10 +1,12 @@
 import {
   CreateKeyCommand,
   GetPublicKeyCommand,
+  type KeySpec,
   KeyUsageType,
   KMSClient,
   ScheduleKeyDeletionCommand,
   SignCommand,
+  SigningAlgorithmSpec,
 } from '@aws-sdk/client-kms';
 import { CryptoKey } from 'webcrypto-core';
 
@@ -33,7 +35,7 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
       throw new KmsError(`Unsupported RSA modulus (${algorithm.modulusLength})`);
     }
 
-    const keySpec = `RSA_${algorithm.modulusLength}`;
+    const keySpec = `RSA_${algorithm.modulusLength}` as KeySpec;
     const command = new CreateKeyCommand({
       KeySpec: keySpec,
       KeyUsage: KeyUsageType.SIGN_VERIFY,
@@ -100,7 +102,7 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
       KeyId: key.arn,
       Message: Buffer.from(digest),
       MessageType: 'DIGEST',
-      SigningAlgorithm: awsHashAlgo,
+      SigningAlgorithm: awsHashAlgo as SigningAlgorithmSpec,
     });
 
     const output = await this.client.send(command, REQUEST_OPTIONS);
