@@ -13,7 +13,7 @@ import { AwsKmsRsaPssPrivateKey } from './AwsKmsRsaPssPrivateKey';
 import { KmsError } from '../KmsError';
 import { HashingAlgorithm } from '../algorithms';
 import { bufferToArrayBuffer } from '../utils/buffer';
-import { derDeserialisePublicKey, hash } from '../utils/crypto';
+import { derDeserialisePublicKey } from '../utils/crypto';
 
 // See: https://docs.aws.amazon.com/kms/latest/developerguide/asymmetric-key-specs.html
 const SUPPORTED_MODULUS_LENGTHS: readonly number[] = [2048, 3072, 4096];
@@ -94,12 +94,11 @@ export class AwsKmsRsaPssProvider extends KmsRsaPssProvider {
     requireAwsKmsKey(key);
 
     const hashingAlgorithm = (key.algorithm as RsaHashedKeyAlgorithm).hash.name;
-    const digest = await hash(data, hashingAlgorithm as HashingAlgorithm);
     const awsHashAlgo = `RSASSA_PSS_${hashingAlgorithm.replace('-', '_')}`;
     const command = new SignCommand({
       KeyId: key.arn,
-      Message: Buffer.from(digest),
-      MessageType: 'DIGEST',
+      Message: new Uint8Array(data),
+      MessageType: 'RAW',
       SigningAlgorithm: awsHashAlgo,
     });
 
