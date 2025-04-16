@@ -57,7 +57,7 @@ describe('AWS KMS', () => {
       webcrypto.subtle.verify(
         RSA_PSS_SIGN_ALGORITHM,
         nodePublicKey, // Use the re-imported key
-        Buffer.from(signature),
+        signature,
         PLAINTEXT,
       ),
     ).resolves.toBeTrue();
